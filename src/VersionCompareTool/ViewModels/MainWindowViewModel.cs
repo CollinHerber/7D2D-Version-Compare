@@ -22,8 +22,11 @@ public partial class MainWindowViewModel : ViewModelBase
     private VersionComparison? _baseComparison;
     private IReadOnlyList<int> _diffAreaIndexes = [];
     private ChangedFileViewModel? _highlightedSelectedFile;
+    private Dictionary<string, FileTreeNodeViewModel> _fileTreeNodesByPath = new(StringComparer.OrdinalIgnoreCase);
     private int _currentDiffAreaIndex = -1;
     private bool _isUpdatingSelections;
+    private bool _isApplyingTreeSelection;
+    private bool _isSyncingTreeSelection;
 
     [ObservableProperty]
     private string? selectedStartVersion;
@@ -38,7 +41,13 @@ public partial class MainWindowViewModel : ViewModelBase
     private ChangedFileViewModel? selectedFile;
 
     [ObservableProperty]
+    private FileTreeNodeViewModel? selectedFileTreeNode;
+
+    [ObservableProperty]
     private DiffLineViewModel? selectedDiffLine;
+
+    [ObservableProperty]
+    private bool isFolderView;
 
     [ObservableProperty]
     private string statusText = "Loading versions and mods...";
@@ -60,6 +69,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private ObservableCollection<ChangedFileViewModel> changedFiles = [];
+
+    [ObservableProperty]
+    private ObservableCollection<FileTreeNodeViewModel> fileTreeNodes = [];
 
     [ObservableProperty]
     private ObservableCollection<DiffLineViewModel> diffLines = [];
@@ -98,6 +110,10 @@ public partial class MainWindowViewModel : ViewModelBase
     public bool HasNoSelectedFile => !HasSelectedFile;
 
     public bool IsNotBusy => !IsBusy;
+
+    public bool IsFlatFileViewVisible => !IsFolderView;
+
+    public bool IsFolderViewVisible => IsFolderView;
 
     partial void OnSelectedStartVersionChanged(string? value)
     {
@@ -153,6 +169,30 @@ public partial class MainWindowViewModel : ViewModelBase
 
         _highlightedSelectedFile = value;
         LoadSelectedFileDiff(value);
+
+        if (!_isApplyingTreeSelection)
+        {
+            SyncSelectedFileTreeNode(value);
+        }
+    }
+
+    partial void OnSelectedFileTreeNodeChanged(FileTreeNodeViewModel? value)
+    {
+        if (_isSyncingTreeSelection)
+        {
+            return;
+        }
+
+        _isApplyingTreeSelection = true;
+
+        try
+        {
+            SelectedFile = value?.File;
+        }
+        finally
+        {
+            _isApplyingTreeSelection = false;
+        }
     }
 
     partial void OnSelectedDiffLineChanged(DiffLineViewModel? value)
@@ -168,6 +208,13 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnIsBusyChanged(bool value)
     {
         OnPropertyChanged(nameof(IsNotBusy));
+    }
+
+    partial void OnIsFolderViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsFlatFileViewVisible));
+        OnPropertyChanged(nameof(IsFolderViewVisible));
+        SyncSelectedFileTreeNode(SelectedFile);
     }
 
     private bool CanNavigateToPreviousDiffArea()
@@ -472,6 +519,7 @@ public partial class MainWindowViewModel : ViewModelBase
         ObservableCollection<ChangedFileViewModel> changedFileViewModels)
     {
         ChangedFiles = changedFileViewModels;
+        RebuildFileTree();
         DiffLines = [];
         SelectedFile = ChangedFiles.FirstOrDefault();
 
@@ -594,6 +642,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private void ClearCurrentResults()
     {
         ChangedFiles = [];
+        FileTreeNodes = [];
+        SelectedFileTreeNode = null;
+        _fileTreeNodesByPath = new Dictionary<string, FileTreeNodeViewModel>(StringComparer.OrdinalIgnoreCase);
         DiffLines = [];
         SelectedDiffLine = null;
         ResetDiffNavigation();
@@ -717,6 +768,123 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         return new ObservableCollection<ChangedFileViewModel>(
             comparison.ChangedFiles.Select(file => new ChangedFileViewModel(file)));
+    }
+
+    private void RebuildFileTree()
+    {
+        var folderNodesByPath = new Dictionary<string, FileTreeNodeViewModel>(StringComparer.OrdinalIgnoreCase);
+        var fileNodesByPath = new Dictionary<string, FileTreeNodeViewModel>(StringComparer.OrdinalIgnoreCase);
+        var roots = new ObservableCollection<FileTreeNodeViewModel>();
+
+        foreach (var file in ChangedFiles.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase))
+        {
+            var normalizedPath = file.RelativePath.Replace('\\', '/');
+            var segments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length == 0)
+            {
+                continue;
+            }
+
+            FileTreeNodeViewModel? parent = null;
+            var folderPath = string.Empty;
+
+            for (var index = 0; index < segments.Length; index++)
+            {
+                var segment = segments[index];
+                var isFile = index == segments.Length - 1;
+
+                if (isFile)
+                {
+                    var fileNode = new FileTreeNodeViewModel(segment, parent, file);
+                    AddFileTreeNode(roots, parent, fileNode);
+                    fileNodesByPath[normalizedPath] = fileNode;
+                    continue;
+                }
+
+                folderPath = string.IsNullOrWhiteSpace(folderPath)
+                    ? segment
+                    : $"{folderPath}/{segment}";
+
+                if (!folderNodesByPath.TryGetValue(folderPath, out var folderNode))
+                {
+                    folderNode = new FileTreeNodeViewModel(segment, parent);
+                    folderNodesByPath[folderPath] = folderNode;
+                    AddFileTreeNode(roots, parent, folderNode);
+                }
+
+                parent = folderNode;
+            }
+        }
+
+        SortFileTreeNodes(roots);
+        _fileTreeNodesByPath = fileNodesByPath;
+        FileTreeNodes = roots;
+    }
+
+    private static void AddFileTreeNode(
+        ObservableCollection<FileTreeNodeViewModel> roots,
+        FileTreeNodeViewModel? parent,
+        FileTreeNodeViewModel node)
+    {
+        if (parent is null)
+        {
+            roots.Add(node);
+            return;
+        }
+
+        parent.Children.Add(node);
+    }
+
+    private static void SortFileTreeNodes(ObservableCollection<FileTreeNodeViewModel> nodes)
+    {
+        var sortedNodes = nodes
+            .OrderByDescending(node => node.IsFolder)
+            .ThenBy(node => node.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        nodes.Clear();
+
+        foreach (var node in sortedNodes)
+        {
+            nodes.Add(node);
+            SortFileTreeNodes(node.Children);
+        }
+    }
+
+    private void SyncSelectedFileTreeNode(ChangedFileViewModel? file)
+    {
+        if (_isApplyingTreeSelection)
+        {
+            return;
+        }
+
+        _isSyncingTreeSelection = true;
+
+        try
+        {
+            if (file is null || !_fileTreeNodesByPath.TryGetValue(file.RelativePath, out var node))
+            {
+                SelectedFileTreeNode = null;
+                return;
+            }
+
+            ExpandAncestors(node);
+            SelectedFileTreeNode = node;
+        }
+        finally
+        {
+            _isSyncingTreeSelection = false;
+        }
+    }
+
+    private static void ExpandAncestors(FileTreeNodeViewModel node)
+    {
+        var current = node.Parent;
+        while (current is not null)
+        {
+            current.IsExpanded = true;
+            current = current.Parent;
+        }
     }
 
     private static string BuildSelectedFileSummary(ChangedFileViewModel file)

@@ -8,6 +8,7 @@ Desktop tool for comparing 7 Days to Die XML files between game versions and spo
 
 - Compares XML files between two local 7 Days to Die version folders.
 - Lists changed XML files by added, removed, and modified status.
+- Switches the changed-file list between flat and expandable folder views.
 - Shows a side-by-side style diff with added and removed lines highlighted.
 - Opens each file at the first changed area and lets you jump between changed areas.
 - Optionally compares a mod folder against the changed game files to flag likely conflicts.
