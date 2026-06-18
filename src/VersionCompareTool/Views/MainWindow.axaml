@@ -1,0 +1,340 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:VersionCompareTool.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="820"
+        x:Class="VersionCompareTool.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Width="1280"
+        Height="820"
+        MinWidth="960"
+        MinHeight="640"
+        WindowState="Maximized"
+        Background="#101418"
+        Title="7D2D Version Compare">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <Window.Styles>
+        <Style Selector="ComboBox">
+            <Setter Property="MinWidth" Value="132"/>
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#91A2AD"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="ListBox.file-list">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="ListBox.file-list ListBoxItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <Style Selector="ListBox.diff-viewer">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="ListBox.diff-viewer ListBoxItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+        </Style>
+        <Style Selector="Button.icon-button">
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid>
+        <Grid RowDefinitions="Auto,*">
+            <Border Grid.Row="0"
+                    Padding="24,18"
+                    Background="#11171B"
+                    BorderBrush="#24313A"
+                    BorderThickness="0,0,0,1">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="7D2D Version Compare"
+                                   Foreground="#F4F8FB"
+                                   FontSize="25"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding StatusText}"
+                                   Foreground="#91A2AD"
+                                   FontSize="13"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="14"
+                                VerticalAlignment="Center">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="label" Text="START VERSION"/>
+                            <ComboBox ItemsSource="{Binding StartVersions}"
+                                      SelectedItem="{Binding SelectedStartVersion, Mode=TwoWay}"/>
+                        </StackPanel>
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="label" Text="END VERSION"/>
+                            <ComboBox ItemsSource="{Binding EndVersions}"
+                                      SelectedItem="{Binding SelectedEndVersion, Mode=TwoWay}"/>
+                        </StackPanel>
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="label" Text="MOD COMPARE"/>
+                            <ComboBox ItemsSource="{Binding Mods}"
+                                      SelectedItem="{Binding SelectedModName, Mode=TwoWay}"
+                                      PlaceholderText="Off"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1" ColumnDefinitions="360,Auto,*">
+                <Border Grid.Column="0"
+                        Padding="14"
+                        Background="#151B20"
+                        BorderBrush="#24313A"
+                        BorderThickness="0,0,1,0">
+                    <Grid RowDefinitions="Auto,*">
+                        <Grid RowDefinitions="Auto,Auto" Margin="0,0,0,10">
+                            <TextBlock Text="Changed files"
+                                       Foreground="#F4F8FB"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"/>
+                            <TextBlock Grid.Row="1"
+                                       Text="{Binding ChangedFileCountText}"
+                                       Foreground="#91A2AD"
+                                       FontSize="13"
+                                       Margin="0,4,0,0"/>
+                        </Grid>
+
+                    <ListBox Grid.Row="1"
+                             Classes="file-list"
+                             ItemsSource="{Binding ChangedFiles}"
+                             SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ChangedFileViewModel">
+                                <Border Padding="8,6"
+                                        CornerRadius="5"
+                                        Background="{Binding CardBackground}"
+                                        BorderBrush="{Binding CardBorderBrush}"
+                                        BorderThickness="1">
+                                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="4,*,Auto" ColumnSpacing="8">
+                                        <Border Grid.RowSpan="2"
+                                                Width="4"
+                                                CornerRadius="2"
+                                                Background="{Binding SelectionAccentBrush}"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding FileName}"
+                                                   Foreground="#F4F8FB"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <StackPanel Grid.Column="2"
+                                                    Orientation="Horizontal"
+                                                    Spacing="4">
+                                            <Border Padding="6,2"
+                                                    CornerRadius="4"
+                                                    Background="{Binding BadgeBackground}">
+                                                <TextBlock Text="{Binding ChangeTypeText}"
+                                                           Foreground="{Binding BadgeForeground}"
+                                                           FontSize="10"
+                                                           FontWeight="SemiBold"/>
+                                            </Border>
+                                            <Border IsVisible="{Binding HasModConflicts}"
+                                                    Padding="6,2"
+                                                    CornerRadius="4"
+                                                    Background="#A44721">
+                                                <TextBlock Text="MOD"
+                                                           Foreground="#FFF7E0"
+                                                           FontSize="10"
+                                                           FontWeight="SemiBold"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Grid.Row="1"
+                                                   Grid.Column="1"
+                                                   Text="{Binding DirectoryPath}"
+                                                   Foreground="#91A2AD"
+                                                   FontSize="11"
+                                                   Margin="0,2,0,0"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <StackPanel Grid.Row="1"
+                                                    Grid.Column="2"
+                                                    Orientation="Horizontal"
+                                                    Spacing="6"
+                                                    Margin="10,2,0,0">
+                                            <TextBlock Text="{Binding AdditionsText}"
+                                                       Foreground="#7EE29E"
+                                                       FontSize="11"
+                                                       FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding DeletionsText}"
+                                                       Foreground="#FF8F9A"
+                                                       FontSize="11"
+                                                       FontWeight="SemiBold"/>
+                                            <TextBlock IsVisible="{Binding HasModConflicts}"
+                                                       Text="{Binding ModConflictCountText}"
+                                                       Foreground="#FFB38A"
+                                                       FontSize="11"
+                                                       FontWeight="SemiBold"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="1"
+                          Width="4"
+                          Background="#101418"
+                          ResizeDirection="Columns"/>
+
+            <Grid Grid.Column="2" RowDefinitions="Auto,*" Background="#101418">
+                <Border Grid.Row="0"
+                        Padding="20,16"
+                        Background="#151B20"
+                        BorderBrush="#24313A"
+                        BorderThickness="0,0,0,1">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="{Binding SelectedFileTitle}"
+                                       Foreground="#F4F8FB"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding SelectedFileSummary}"
+                                       Foreground="#91A2AD"
+                                       FontSize="13"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    VerticalAlignment="Center">
+                            <Button Classes="icon-button"
+                                    Command="{Binding NavigateToPreviousDiffAreaCommand}">
+                                <TextBlock Text="↑"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"/>
+                            </Button>
+                            <TextBlock Text="{Binding DiffNavigationStatus}"
+                                       Foreground="#91A2AD"
+                                       FontSize="12"
+                                       MinWidth="48"
+                                       TextAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                            <Button Classes="icon-button"
+                                    Command="{Binding NavigateToNextDiffAreaCommand}">
+                                <TextBlock Text="↓"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="1">
+                    <Border IsVisible="{Binding HasNoSelectedFile}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Padding="24"
+                            Background="#151B20"
+                            BorderBrush="#2B3842"
+                            BorderThickness="1"
+                            CornerRadius="7">
+                        <TextBlock Text="Select a changed XML file to view its diff."
+                                   Foreground="#91A2AD"
+                                   FontSize="15"/>
+                    </Border>
+
+                    <ListBox IsVisible="{Binding HasSelectedFile}"
+                             x:Name="DiffListBox"
+                             Classes="diff-viewer"
+                             ItemsSource="{Binding DiffLines}"
+                             SelectedItem="{Binding SelectedDiffLine, Mode=TwoWay}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:DiffLineViewModel">
+                                <Border Background="{Binding Background}"
+                                        BorderBrush="{Binding BorderBrush}"
+                                        BorderThickness="0,0,0,1">
+                                    <Grid ColumnDefinitions="64,64,34,*"
+                                          MinHeight="26">
+                                        <TextBlock Text="{Binding OldLineNumber}"
+                                                   Foreground="{Binding MutedForeground}"
+                                                   FontFamily="Cascadia Mono,Consolas,monospace"
+                                                   FontSize="12"
+                                                   HorizontalAlignment="Right"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,12,0"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding NewLineNumber}"
+                                                   Foreground="{Binding MutedForeground}"
+                                                   FontFamily="Cascadia Mono,Consolas,monospace"
+                                                   FontSize="12"
+                                                   HorizontalAlignment="Right"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,12,0"/>
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding Marker}"
+                                                   Foreground="{Binding Foreground}"
+                                                   FontFamily="Cascadia Mono,Consolas,monospace"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="3"
+                                                   Text="{Binding Text}"
+                                                   Foreground="{Binding Foreground}"
+                                                   FontFamily="Cascadia Mono,Consolas,monospace"
+                                                   FontSize="13"
+                                                   VerticalAlignment="Center"
+                                                   TextWrapping="NoWrap"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Grid>
+        </Grid>
+        </Grid>
+
+        <Border IsVisible="{Binding IsBusy}"
+                Background="#CC101418">
+            <Border Width="380"
+                    Padding="24"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="#151B20"
+                    BorderBrush="#2B3842"
+                    BorderThickness="1"
+                    CornerRadius="7">
+                <StackPanel Spacing="14">
+                    <ProgressBar IsIndeterminate="True"
+                                 Height="4"/>
+                    <TextBlock Text="{Binding BusyText}"
+                               Foreground="#F4F8FB"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"/>
+                    <TextBlock Text="Large version folders can take several minutes."
+                               Foreground="#91A2AD"
+                               FontSize="12"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</Window>

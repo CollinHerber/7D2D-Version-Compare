@@ -1,0 +1,15 @@
+bin/
+obj/
+.vs/
+.vscode/
+.idea/
+TestResults/
+*.user
+*.suo
+*.nupkg
+*.snupkg
+*.log
+artifacts/
+.cache/
+/Versions/
+/Mods/

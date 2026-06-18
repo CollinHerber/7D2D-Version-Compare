@@ -1,0 +1,117 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows Build and Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Compute release plan
+        id: plan
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File eng/Get-ReleasePlan.ps1
+
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore VersionCompareTool.slnx
+
+      - name: Test
+        shell: pwsh
+        run: dotnet test VersionCompareTool.slnx --configuration Release --no-restore
+
+      - name: Skip release
+        if: steps.plan.outputs.should_release != 'true'
+        shell: pwsh
+        run: Write-Host "No feat, fix, or chore commits since the latest version tag. Release skipped."
+
+      - name: Publish Windows build
+        if: steps.plan.outputs.should_release == 'true'
+        shell: pwsh
+        run: >
+          dotnet publish src/VersionCompareTool/VersionCompareTool.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --no-restore
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version=${{ steps.plan.outputs.version }}
+          -o artifacts/publish/win-x64
+
+      - name: Add data folder placeholders
+        if: steps.plan.outputs.should_release == 'true'
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path artifacts/publish/win-x64 -Filter *.pdb -Recurse | Remove-Item -Force
+          New-Item -ItemType Directory -Force -Path artifacts/publish/win-x64/Versions | Out-Null
+          New-Item -ItemType Directory -Force -Path artifacts/publish/win-x64/Mods | Out-Null
+          Set-Content -Path artifacts/publish/win-x64/Versions/README.txt -Value "Create one folder per 7D2D version here, for example: 2.6 or 3.0."
+          Set-Content -Path artifacts/publish/win-x64/Mods/README.txt -Value "Create one folder per mod here. Mod comparison is off until a mod is selected."
+
+      - name: Package Windows build
+        if: steps.plan.outputs.should_release == 'true'
+        id: package
+        shell: pwsh
+        run: |
+          $version = "${{ steps.plan.outputs.version }}"
+          $zipPath = "artifacts/7D2D-Version-Compare-v$version-win-x64.zip"
+          Compress-Archive -Path artifacts/publish/win-x64/* -DestinationPath $zipPath -Force
+          "zip_path=$zipPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Create tag
+        if: steps.plan.outputs.should_release == 'true'
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.plan.outputs.tag }}"
+          $remoteTag = git ls-remote --tags origin "refs/tags/$tag"
+          if (-not [string]::IsNullOrWhiteSpace($remoteTag)) {
+            Write-Host "Tag $tag already exists on origin."
+          }
+          else {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            if (-not (git rev-parse "refs/tags/$tag" 2>$null)) {
+              git tag $tag
+            }
+            git push origin $tag
+          }
+
+      - name: Create GitHub release
+        if: steps.plan.outputs.should_release == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.plan.outputs.tag }}"
+          $zipPath = "${{ steps.package.outputs.zip_path }}"
+          $notesPath = "${{ steps.plan.outputs.notes_path }}"
+
+          if (gh release view $tag 2>$null) {
+            gh release upload $tag $zipPath --clobber
+          }
+          else {
+            gh release create $tag $zipPath --title $tag --notes-file $notesPath
+          }

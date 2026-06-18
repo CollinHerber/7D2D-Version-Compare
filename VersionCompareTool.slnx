@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/VersionCompareTool.Core/VersionCompareTool.Core.csproj" />
+    <Project Path="src/VersionCompareTool/VersionCompareTool.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/VersionCompareTool.Core.Tests/VersionCompareTool.Core.Tests.csproj" />
+  </Folder>
+</Solution>
