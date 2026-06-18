@@ -28,6 +28,7 @@ public sealed class XmlVersionComparisonService
         string endDirectory,
         string? modName = null,
         string? modDirectory = null,
+        bool ignoreWhitespaceChanges = false,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(startVersion);
@@ -52,7 +53,8 @@ public sealed class XmlVersionComparisonService
             NormalizeDirectoryForCacheKey(startDirectory),
             NormalizeDirectoryForCacheKey(endDirectory),
             startCatalog.Fingerprint,
-            endCatalog.Fingerprint);
+            endCatalog.Fingerprint,
+            ignoreWhitespaceChanges);
 
         var cachedComparison = _cache.TryLoad(cacheKey, cancellationToken);
         if (cachedComparison is not null)
@@ -65,6 +67,7 @@ public sealed class XmlVersionComparisonService
             endVersion,
             startCatalog.Files,
             endCatalog.Files,
+            ignoreWhitespaceChanges,
             cancellationToken);
 
         _cache.Save(cacheKey, comparison, cancellationToken);
@@ -113,6 +116,7 @@ public sealed class XmlVersionComparisonService
         string endVersion,
         SortedDictionary<string, string> startFiles,
         SortedDictionary<string, string> endFiles,
+        bool ignoreWhitespaceChanges,
         CancellationToken cancellationToken)
     {
         var allPaths = startFiles.Keys
@@ -160,7 +164,12 @@ public sealed class XmlVersionComparisonService
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            var lines = BuildModifiedFileDiff(startText, endText);
+            var lines = BuildModifiedFileDiff(startText, endText, ignoreWhitespaceChanges);
+            if (!lines.Any(line => line.Kind is DiffLineKind.Added or DiffLineKind.Removed))
+            {
+                continue;
+            }
+
             changedFiles.Add(new ChangedFile(
                 relativePath,
                 FileChangeType.Modified,
@@ -285,9 +294,12 @@ public sealed class XmlVersionComparisonService
             : [];
     }
 
-    private static IReadOnlyList<DiffLine> BuildModifiedFileDiff(string oldText, string newText)
+    private static IReadOnlyList<DiffLine> BuildModifiedFileDiff(
+        string oldText,
+        string newText,
+        bool ignoreWhitespaceChanges)
     {
-        var model = SideBySideDiffBuilder.Diff(oldText, newText, false, false);
+        var model = SideBySideDiffBuilder.Diff(oldText, newText, ignoreWhitespaceChanges, false);
         var oldLines = model.OldText.Lines;
         var newLines = model.NewText.Lines;
         var count = Math.Max(oldLines.Count, newLines.Count);

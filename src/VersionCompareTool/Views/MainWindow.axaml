@@ -6,7 +6,7 @@
         mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="820"
         x:Class="VersionCompareTool.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/avalonia-logo.ico"
+        Icon="/Assets/app-icon.ico"
         Width="1280"
         Height="820"
         MinWidth="960"
@@ -70,38 +70,68 @@
                     Background="#11171B"
                     BorderBrush="#24313A"
                     BorderThickness="0,0,0,1">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="7D2D Version Compare"
-                                   Foreground="#F4F8FB"
-                                   FontSize="25"
-                                   FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding StatusText}"
-                                   Foreground="#91A2AD"
-                                   FontSize="13"/>
-                    </StackPanel>
+                <Grid RowDefinitions="Auto,Auto">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="7D2D Version Compare"
+                                       Foreground="#F4F8FB"
+                                       FontSize="25"
+                                       FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding StatusText}"
+                                       Foreground="#91A2AD"
+                                       FontSize="13"/>
+                        </StackPanel>
 
-                    <StackPanel Grid.Column="1"
-                                Orientation="Horizontal"
-                                Spacing="14"
-                                VerticalAlignment="Center">
-                        <StackPanel Spacing="6">
-                            <TextBlock Classes="label" Text="START VERSION"/>
-                            <ComboBox ItemsSource="{Binding StartVersions}"
-                                      SelectedItem="{Binding SelectedStartVersion, Mode=TwoWay}"/>
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    Spacing="14"
+                                    VerticalAlignment="Center">
+                            <StackPanel Spacing="6">
+                                <TextBlock Classes="label" Text="START VERSION"/>
+                                <ComboBox ItemsSource="{Binding StartVersions}"
+                                          SelectedItem="{Binding SelectedStartVersion, Mode=TwoWay}"/>
+                            </StackPanel>
+                            <StackPanel Spacing="6">
+                                <TextBlock Classes="label" Text="END VERSION"/>
+                                <ComboBox ItemsSource="{Binding EndVersions}"
+                                          SelectedItem="{Binding SelectedEndVersion, Mode=TwoWay}"/>
+                            </StackPanel>
+                            <StackPanel Spacing="6">
+                                <TextBlock Classes="label" Text="MOD COMPARE"/>
+                                <ComboBox ItemsSource="{Binding Mods}"
+                                          SelectedItem="{Binding SelectedModName, Mode=TwoWay}"
+                                          PlaceholderText="Off"/>
+                            </StackPanel>
                         </StackPanel>
-                        <StackPanel Spacing="6">
-                            <TextBlock Classes="label" Text="END VERSION"/>
-                            <ComboBox ItemsSource="{Binding EndVersions}"
-                                      SelectedItem="{Binding SelectedEndVersion, Mode=TwoWay}"/>
+                    </Grid>
+
+                    <Border Grid.Row="1"
+                            Margin="0,16,0,0"
+                            Padding="12,9"
+                            Background="#151D23"
+                            BorderBrush="#27353E"
+                            BorderThickness="1"
+                            CornerRadius="5">
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="16"
+                                    VerticalAlignment="Center">
+                            <TextBlock Classes="label"
+                                       Text="SETTINGS"
+                                       VerticalAlignment="Center"/>
+                            <CheckBox Content="Folder view"
+                                      IsChecked="{Binding IsFolderView, Mode=TwoWay}"
+                                      Foreground="#D7E0E6"
+                                      FontSize="12"/>
+                            <CheckBox Content="Mod conflicts only"
+                                      IsChecked="{Binding ShowOnlyModConflicts, Mode=TwoWay}"
+                                      Foreground="#D7E0E6"
+                                      FontSize="12"/>
+                            <CheckBox Content="Hide whitespace changes"
+                                      IsChecked="{Binding IgnoreWhitespaceChanges, Mode=TwoWay}"
+                                      Foreground="#D7E0E6"
+                                      FontSize="12"/>
                         </StackPanel>
-                        <StackPanel Spacing="6">
-                            <TextBlock Classes="label" Text="MOD COMPARE"/>
-                            <ComboBox ItemsSource="{Binding Mods}"
-                                      SelectedItem="{Binding SelectedModName, Mode=TwoWay}"
-                                      PlaceholderText="Off"/>
-                        </StackPanel>
-                    </StackPanel>
+                    </Border>
                 </Grid>
             </Border>
 
@@ -113,18 +143,11 @@
                         BorderThickness="0,0,1,0">
                     <Grid RowDefinitions="Auto,*">
                         <Grid RowDefinitions="Auto,Auto"
-                              ColumnDefinitions="*,Auto"
                               Margin="0,0,0,10">
                             <TextBlock Text="Changed files"
                                        Foreground="#F4F8FB"
                                        FontSize="18"
                                        FontWeight="SemiBold"/>
-                            <CheckBox Grid.Column="1"
-                                      Content="Folder view"
-                                      IsChecked="{Binding IsFolderView, Mode=TwoWay}"
-                                      Foreground="#D7E0E6"
-                                      FontSize="12"
-                                      VerticalAlignment="Center"/>
                             <TextBlock Grid.Row="1"
                                        Text="{Binding ChangedFileCountText}"
                                        Foreground="#91A2AD"

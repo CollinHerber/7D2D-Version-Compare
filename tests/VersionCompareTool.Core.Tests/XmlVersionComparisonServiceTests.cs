@@ -84,6 +84,47 @@ public sealed class XmlVersionComparisonServiceTests : IDisposable
     }
 
     [Fact]
+    public void Compare_CanIgnoreWhitespaceOnlyChanges()
+    {
+        WriteFile("2.6", "config/items.xml", """
+            <items>
+              <item name="old" />
+            </items>
+            """);
+        WriteFile("3.0", "config/items.xml", """
+            <items>
+                    <item name="old" />
+            </items>
+            """);
+
+        var comparison = Compare(ignoreWhitespaceChanges: true);
+
+        Assert.Empty(comparison.ChangedFiles);
+    }
+
+    [Fact]
+    public void Compare_UsesSeparateCacheEntriesForWhitespaceSetting()
+    {
+        WriteFile("2.6", "config/items.xml", """
+            <items>
+              <item name="old" />
+            </items>
+            """);
+        WriteFile("3.0", "config/items.xml", """
+            <items>
+                    <item name="old" />
+            </items>
+            """);
+
+        var whitespaceAwareComparison = Compare();
+        var ignoreWhitespaceComparison = Compare(ignoreWhitespaceChanges: true);
+
+        Assert.Single(whitespaceAwareComparison.ChangedFiles);
+        Assert.Empty(ignoreWhitespaceComparison.ChangedFiles);
+        Assert.False(ignoreWhitespaceComparison.IsFromCache);
+    }
+
+    [Fact]
     public void Compare_FlagsModFilesThatOverlapChangedVersionFiles()
     {
         WriteFile("2.6", "Data/Config/items.xml", """
@@ -180,14 +221,15 @@ public sealed class XmlVersionComparisonServiceTests : IDisposable
         Assert.Contains(file.Lines, line => line.Kind == DiffLineKind.Added && line.Text.Contains("newer-value"));
     }
 
-    private VersionComparison Compare()
+    private VersionComparison Compare(bool ignoreWhitespaceChanges = false)
     {
         var service = CreateService();
         return service.Compare(
             "2.6",
             "3.0",
             Path.Combine(_root, "2.6"),
-            Path.Combine(_root, "3.0"));
+            Path.Combine(_root, "3.0"),
+            ignoreWhitespaceChanges: ignoreWhitespaceChanges);
     }
 
     private VersionComparison CompareWithMod(string modName)

@@ -20,6 +20,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private CancellationTokenSource? _versionComparisonCts;
     private CancellationTokenSource? _modConflictCts;
     private VersionComparison? _baseComparison;
+    private IReadOnlyList<ChangedFileViewModel> _allChangedFiles = [];
     private IReadOnlyList<int> _diffAreaIndexes = [];
     private ChangedFileViewModel? _highlightedSelectedFile;
     private Dictionary<string, FileTreeNodeViewModel> _fileTreeNodesByPath = new(StringComparer.OrdinalIgnoreCase);
@@ -48,6 +49,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool isFolderView;
+
+    [ObservableProperty]
+    private bool showOnlyModConflicts;
+
+    [ObservableProperty]
+    private bool ignoreWhitespaceChanges;
 
     [ObservableProperty]
     private string statusText = "Loading versions and mods...";
@@ -152,6 +159,11 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            ShowOnlyModConflicts = false;
+        }
+
         QueueModConflictScan();
     }
 
@@ -215,6 +227,21 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsFlatFileViewVisible));
         OnPropertyChanged(nameof(IsFolderViewVisible));
         SyncSelectedFileTreeNode(SelectedFile);
+    }
+
+    partial void OnShowOnlyModConflictsChanged(bool value)
+    {
+        RefreshVisibleChangedFiles();
+    }
+
+    partial void OnIgnoreWhitespaceChangesChanged(bool value)
+    {
+        if (_isUpdatingSelections)
+        {
+            return;
+        }
+
+        QueueVersionComparison();
     }
 
     private bool CanNavigateToPreviousDiffArea()
@@ -356,7 +383,8 @@ public partial class MainWindowViewModel : ViewModelBase
             SelectedStartVersion,
             SelectedEndVersion,
             Path.Combine(_versionRoot, SelectedStartVersion),
-            Path.Combine(_versionRoot, SelectedEndVersion));
+            Path.Combine(_versionRoot, SelectedEndVersion),
+            IgnoreWhitespaceChanges);
 
         var cts = new CancellationTokenSource();
         _versionComparisonCts = cts;
@@ -382,6 +410,7 @@ public partial class MainWindowViewModel : ViewModelBase
                     request.EndVersion,
                     request.StartDirectory,
                     request.EndDirectory,
+                    ignoreWhitespaceChanges: request.IgnoreWhitespaceChanges,
                     cancellationToken: cts.Token),
                 cts.Token);
 
@@ -518,21 +547,9 @@ public partial class MainWindowViewModel : ViewModelBase
         VersionComparison comparison,
         ObservableCollection<ChangedFileViewModel> changedFileViewModels)
     {
-        ChangedFiles = changedFileViewModels;
-        RebuildFileTree();
-        DiffLines = [];
-        SelectedFile = ChangedFiles.FirstOrDefault();
-
-        ChangedFileCountText = ChangedFiles.Count == 1
-            ? "1 changed file"
-            : $"{ChangedFiles.Count} changed files";
+        _allChangedFiles = changedFileViewModels;
+        RefreshVisibleChangedFiles();
         StatusText = BuildStatusText(comparison);
-
-        if (SelectedFile is null)
-        {
-            SelectedFileTitle = "No XML changes found";
-            SelectedFileSummary = "Choose another version range or add more XML snapshots.";
-        }
 
         NotifySelectedFileStateChanged();
     }
@@ -641,6 +658,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void ClearCurrentResults()
     {
+        _allChangedFiles = [];
         ChangedFiles = [];
         FileTreeNodes = [];
         SelectedFileTreeNode = null;
@@ -668,6 +686,78 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(HasSelectedFile));
         OnPropertyChanged(nameof(HasNoSelectedFile));
+    }
+
+    private void RefreshVisibleChangedFiles()
+    {
+        var previousSelectedPath = SelectedFile?.RelativePath;
+        var visibleFiles = GetVisibleChangedFiles().ToArray();
+
+        ChangedFiles = new ObservableCollection<ChangedFileViewModel>(visibleFiles);
+        RebuildFileTree();
+        RefreshChangedFileCountText();
+
+        var selectedFile = !string.IsNullOrWhiteSpace(previousSelectedPath)
+            ? ChangedFiles.FirstOrDefault(file => string.Equals(
+                file.RelativePath,
+                previousSelectedPath,
+                StringComparison.OrdinalIgnoreCase))
+            : null;
+
+        SelectedFile = selectedFile ?? ChangedFiles.FirstOrDefault();
+
+        if (SelectedFile is null)
+        {
+            ApplyEmptyVisibleSelectionState();
+            return;
+        }
+
+        SyncSelectedFileTreeNode(SelectedFile);
+    }
+
+    private IEnumerable<ChangedFileViewModel> GetVisibleChangedFiles()
+    {
+        return ShowOnlyModConflicts
+            ? _allChangedFiles.Where(file => file.HasModConflicts)
+            : _allChangedFiles;
+    }
+
+    private void RefreshChangedFileCountText()
+    {
+        if (!ShowOnlyModConflicts)
+        {
+            ChangedFileCountText = ChangedFiles.Count == 1
+                ? "1 changed file"
+                : $"{ChangedFiles.Count} changed files";
+            return;
+        }
+
+        var conflictText = ChangedFiles.Count == 1
+            ? "1 mod conflict file"
+            : $"{ChangedFiles.Count} mod conflict files";
+        ChangedFileCountText = $"{conflictText} shown from {_allChangedFiles.Count} changed files";
+    }
+
+    private void ApplyEmptyVisibleSelectionState()
+    {
+        if (_allChangedFiles.Count == 0)
+        {
+            SelectedFileTitle = "No XML changes found";
+            SelectedFileSummary = "Choose another version range or add more XML snapshots.";
+            return;
+        }
+
+        if (ShowOnlyModConflicts)
+        {
+            SelectedFileTitle = "No mod conflicts found";
+            SelectedFileSummary = string.IsNullOrWhiteSpace(SelectedModName)
+                ? "Select a mod to scan for conflicts, or turn off the mod conflict filter."
+                : "The selected mod does not overlap any changed XML files.";
+            return;
+        }
+
+        SelectedFileTitle = "Select a changed XML file";
+        SelectedFileSummary = "The diff will appear here after you choose a file.";
     }
 
     private void RebuildDiffAreaIndexes()
@@ -938,7 +1028,8 @@ public partial class MainWindowViewModel : ViewModelBase
         string StartVersion,
         string EndVersion,
         string StartDirectory,
-        string EndDirectory);
+        string EndDirectory,
+        bool IgnoreWhitespaceChanges);
 
     private sealed record ModConflictRequest(
         string ModName,

@@ -6,4 +6,5 @@ public sealed record VersionComparisonCacheKey(
     string StartDirectory,
     string EndDirectory,
     FolderFingerprint StartFingerprint,
-    FolderFingerprint EndFingerprint);
+    FolderFingerprint EndFingerprint,
+    bool IgnoreWhitespaceChanges);
