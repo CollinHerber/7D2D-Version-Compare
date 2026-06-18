@@ -103,6 +103,48 @@ public sealed class XmlVersionComparisonServiceTests : IDisposable
     }
 
     [Fact]
+    public void Compare_CanIgnoreBlankLineOnlyChanges()
+    {
+        WriteFile("2.6", "config/items.xml", """
+            <items>
+              <item name="old" />
+            </items>
+            """);
+        WriteFile("3.0", "config/items.xml", """
+            <items>
+
+              <item name="old" />
+            </items>
+            """);
+
+        var comparison = Compare(ignoreWhitespaceChanges: true);
+
+        Assert.Empty(comparison.ChangedFiles);
+    }
+
+    [Fact]
+    public void Compare_HidesBlankAddedLinesWhenContentAlsoChanged()
+    {
+        WriteFile("2.6", "config/archetypes.xml", """
+            <archetypes>
+            </archetypes>
+            """);
+        WriteFile("3.0", "config/archetypes.xml", """
+            <?xml version="1.0" encoding="UTF-8"?>
+
+            <archetypes>
+            </archetypes>
+            """);
+
+        var comparison = Compare(ignoreWhitespaceChanges: true);
+
+        var file = Assert.Single(comparison.ChangedFiles);
+        Assert.Equal(1, file.Additions);
+        Assert.DoesNotContain(file.Lines, line => line.Kind == DiffLineKind.Added && string.IsNullOrWhiteSpace(line.Text));
+        Assert.Contains(file.Lines, line => line.Kind == DiffLineKind.Added && line.Text.Contains("<?xml"));
+    }
+
+    [Fact]
     public void Compare_UsesSeparateCacheEntriesForWhitespaceSetting()
     {
         WriteFile("2.6", "config/items.xml", """

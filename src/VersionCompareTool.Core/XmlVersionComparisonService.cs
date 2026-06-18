@@ -339,7 +339,15 @@ public sealed class XmlVersionComparisonService
             }
         }
 
-        return lines;
+        return ignoreWhitespaceChanges
+            ? lines.Where(ShouldKeepWhitespaceIgnoredDiffLine).ToArray()
+            : lines;
+    }
+
+    private static bool ShouldKeepWhitespaceIgnoredDiffLine(DiffLine line)
+    {
+        return line.Kind is not (DiffLineKind.Added or DiffLineKind.Removed)
+            || !string.IsNullOrWhiteSpace(line.Text);
     }
 
     private static bool IsContextLine(DiffPiece? oldPiece, DiffPiece? newPiece)
