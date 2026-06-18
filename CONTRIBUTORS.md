@@ -91,7 +91,9 @@ For packaged builds, place `Versions` and `Mods` beside `VersionCompareTool.exe`
 
 GitHub Actions publishes Windows releases from `.github/workflows/release.yml` on pushes to `main` or manual `workflow_dispatch` runs.
 
-The workflow:
+The workflow first computes the release plan. If no release is needed, it exits before .NET setup, restore, test, publish, tag, or release steps run.
+
+When a release is needed, the workflow:
 
 - Restores and tests the solution on `windows-latest`.
 - Computes the next version from conventional commits since the latest `vMAJOR.MINOR.PATCH` tag.
@@ -111,9 +113,10 @@ chore: update release workflow
 
 Version bump rules:
 
-- Breaking commits, such as `feat!: ...` or a `BREAKING CHANGE:` footer, bump major.
+- Breaking `feat` or `fix` commits, such as `feat!: ...` or a `BREAKING CHANGE:` footer, bump major.
 - `feat` commits bump minor.
-- `fix` and `chore` commits bump patch.
-- If there are no `feat`, `fix`, or `chore` commits since the latest tag, the release is skipped.
+- `fix` commits bump patch.
+- `chore` commits are included in release notes when a release is already being created, but do not bump the version.
+- If there are no `feat` or `fix` commits since the latest tag, the release is skipped before .NET setup, restore, test, publish, tag, or release steps run.
 
 Release notes are grouped into Features, Fixes, and Chores.

@@ -24,28 +24,31 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-
       - name: Compute release plan
         id: plan
         shell: pwsh
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File eng/Get-ReleasePlan.ps1
 
+      - name: Skip release
+        if: steps.plan.outputs.should_release != 'true'
+        shell: pwsh
+        run: Write-Host "No feat or fix commits since the latest version tag. Chore commits do not create a release."
+
+      - name: Setup .NET
+        if: steps.plan.outputs.should_release == 'true'
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
       - name: Restore
+        if: steps.plan.outputs.should_release == 'true'
         shell: pwsh
         run: dotnet restore VersionCompareTool.slnx
 
       - name: Test
+        if: steps.plan.outputs.should_release == 'true'
         shell: pwsh
         run: dotnet test VersionCompareTool.slnx --configuration Release --no-restore
-
-      - name: Skip release
-        if: steps.plan.outputs.should_release != 'true'
-        shell: pwsh
-        run: Write-Host "No feat, fix, or chore commits since the latest version tag. Release skipped."
 
       - name: Publish Windows build
         if: steps.plan.outputs.should_release == 'true'

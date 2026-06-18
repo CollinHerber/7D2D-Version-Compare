@@ -151,24 +151,25 @@ function New-ReleaseNotes {
 $latestTag = Get-LatestVersionTag
 $range = if ([string]::IsNullOrWhiteSpace($latestTag)) { "" } else { "$latestTag..HEAD" }
 $commits = @(Get-CommitRecords -Range $range | ForEach-Object { ConvertTo-ConventionalCommit $_ } | Where-Object { $_ -ne $null })
+$versionBumpCommits = @($commits | Where-Object { $_.Type -ne "chore" })
 
 $shouldRelease = $true
 if ([string]::IsNullOrWhiteSpace($latestTag)) {
     $version = "0.1.0"
 }
-elseif ($commits.Count -eq 0) {
+elseif ($versionBumpCommits.Count -eq 0) {
     $parts = Get-VersionParts -Tag $latestTag
     $version = "$($parts.Major).$($parts.Minor).$($parts.Patch)"
     $shouldRelease = $false
 }
 else {
     $parts = Get-VersionParts -Tag $latestTag
-    if (@($commits | Where-Object { $_.IsBreaking }).Count -gt 0) {
+    if (@($versionBumpCommits | Where-Object { $_.IsBreaking }).Count -gt 0) {
         $parts.Major += 1
         $parts.Minor = 0
         $parts.Patch = 0
     }
-    elseif (@($commits | Where-Object { $_.Type -eq "feat" }).Count -gt 0) {
+    elseif (@($versionBumpCommits | Where-Object { $_.Type -eq "feat" }).Count -gt 0) {
         $parts.Minor += 1
         $parts.Patch = 0
     }

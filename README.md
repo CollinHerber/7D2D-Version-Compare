@@ -47,7 +47,9 @@ Versions/
 
 Every direct child folder under `Versions` appears in the Start Version and End Version dropdowns. After you pick a start version, that same version is removed from the end version dropdown so the app always compares two different folders.
 
-## Add Mods
+## Add & Compare Mods
+
+![7D2D Version Compare preview](docs/add-mod.gif)
 
 Mod comparison is optional and off by default. To compare a mod, add it under the `Mods` folder:
 
