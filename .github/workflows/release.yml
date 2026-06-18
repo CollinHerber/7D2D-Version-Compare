@@ -20,12 +20,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
 
@@ -93,10 +93,11 @@ jobs:
           else {
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            if (-not (git rev-parse "refs/tags/$tag" 2>$null)) {
+            $localTag = git tag --list $tag
+            if ([string]::IsNullOrWhiteSpace($localTag)) {
               git tag $tag
             }
-            git push origin $tag
+            git push origin "refs/tags/$tag"
           }
 
       - name: Create GitHub release
