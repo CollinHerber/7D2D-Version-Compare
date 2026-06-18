@@ -2,6 +2,8 @@
 
 Desktop tool for comparing 7 Days to Die XML files between game versions and spotting mod conflicts caused by those changes.
 
+![7D2D Version Compare preview](docs/preview.gif)
+
 ## What It Does
 
 - Compares XML files between two local 7 Days to Die version folders.
