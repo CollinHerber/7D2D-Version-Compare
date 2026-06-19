@@ -13,6 +13,9 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  BUILD_CONFIGURATION: Release
+
 jobs:
   windows:
     name: Windows Build and Release
@@ -43,24 +46,27 @@ jobs:
       - name: Restore
         if: steps.plan.outputs.should_release == 'true'
         shell: pwsh
-        run: dotnet restore VersionCompareTool.slnx
+        run: dotnet restore VersionCompareTool.slnx -p:Configuration=${{ env.BUILD_CONFIGURATION }}
 
       - name: Test
         if: steps.plan.outputs.should_release == 'true'
         shell: pwsh
-        run: dotnet test VersionCompareTool.slnx --configuration Release --no-restore
+        run: dotnet test VersionCompareTool.slnx --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore
 
       - name: Publish Windows build
         if: steps.plan.outputs.should_release == 'true'
         shell: pwsh
         run: >
           dotnet publish src/VersionCompareTool/VersionCompareTool.csproj
-          --configuration Release
+          --configuration ${{ env.BUILD_CONFIGURATION }}
           --runtime win-x64
           --self-contained true
           --no-restore
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Optimize=true
+          -p:DebugType=none
+          -p:DebugSymbols=false
           -p:Version=${{ steps.plan.outputs.version }}
           -o artifacts/publish/win-x64
 
@@ -74,6 +80,64 @@ jobs:
           Set-Content -Path artifacts/publish/win-x64/Versions/README.txt -Value "Create one folder per 7D2D version here, for example: 2.6 or 3.0."
           Set-Content -Path artifacts/publish/win-x64/Mods/README.txt -Value "Create one folder per mod here. Mod comparison is off until a mod is selected."
 
+      - name: Validate Release artifact
+        if: steps.plan.outputs.should_release == 'true'
+        shell: pwsh
+        run: |
+          $publishPath = "artifacts/publish/win-x64"
+          $pdbFiles = @(Get-ChildItem -Path $publishPath -Filter *.pdb -Recurse)
+          if ($pdbFiles.Count -gt 0) {
+            $paths = $pdbFiles | ForEach-Object { $_.FullName }
+            throw "Release artifact contains debug symbols: $($paths -join ', ')"
+          }
+
+          $diagnosticsFiles = @(
+            Get-ChildItem -Path $publishPath -File -Recurse |
+              Where-Object {
+                $_.Name -like "Avalonia.Diagnostics*" -or
+                $_.Name -like "AvaloniaUI.DiagnosticsSupport*"
+              }
+          )
+          if ($diagnosticsFiles.Count -gt 0) {
+            $paths = $diagnosticsFiles | ForEach-Object { $_.FullName }
+            throw "Release artifact contains Avalonia diagnostics files: $($paths -join ', ')"
+          }
+
+          $assetsPath = "src/VersionCompareTool/obj/project.assets.json"
+          if ((Test-Path $assetsPath) -and (Select-String -Path $assetsPath -Pattern "AvaloniaUI.DiagnosticsSupport" -SimpleMatch -Quiet)) {
+            throw "Release restore includes AvaloniaUI.DiagnosticsSupport."
+          }
+
+          function Test-FileContainsAsciiText {
+            param(
+              [string]$Path,
+              [string]$Text
+            )
+
+            $bytes = [System.IO.File]::ReadAllBytes($Path)
+            $needle = [System.Text.Encoding]::ASCII.GetBytes($Text)
+            for ($i = 0; $i -le $bytes.Length - $needle.Length; $i++) {
+              $found = $true
+              for ($j = 0; $j -lt $needle.Length; $j++) {
+                if ($bytes[$i + $j] -ne $needle[$j]) {
+                  $found = $false
+                  break
+                }
+              }
+
+              if ($found) {
+                return $true
+              }
+            }
+
+            return $false
+          }
+
+          $appExe = Join-Path $publishPath "VersionCompareTool.exe"
+          if (Test-FileContainsAsciiText -Path $appExe -Text "WithDeveloperTools") {
+            throw "Release executable contains Avalonia developer tools."
+          }
+
       - name: Package Windows build
         if: steps.plan.outputs.should_release == 'true'
         id: package
@@ -83,6 +147,34 @@ jobs:
           $zipPath = "artifacts/7D2D-Version-Compare-v$version-win-x64.zip"
           Compress-Archive -Path artifacts/publish/win-x64/* -DestinationPath $zipPath -Force
           "zip_path=$zipPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Prepare Nexus Mods metadata
+        if: steps.plan.outputs.should_release == 'true'
+        id: nexus_metadata
+        shell: pwsh
+        run: |
+          $notesPath = "${{ steps.plan.outputs.notes_path }}"
+          $description = if (Test-Path $notesPath) {
+            Get-Content -Path $notesPath -Raw
+          }
+          else {
+            "Release ${{ steps.plan.outputs.tag }}"
+          }
+
+          $delimiter = [guid]::NewGuid().ToString()
+          "description<<$delimiter" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $description | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $delimiter | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Validate Nexus Mods API key
+        if: steps.plan.outputs.should_release == 'true'
+        shell: pwsh
+        env:
+          NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:NEXUSMODS_API_KEY)) {
+            throw "Missing NEXUSMODS_API_KEY repository secret."
+          }
 
       - name: Create tag
         if: steps.plan.outputs.should_release == 'true'
@@ -119,3 +211,15 @@ jobs:
           else {
             gh release create $tag $zipPath --title $tag --notes-file $notesPath
           }
+
+      - name: Upload release to Nexus Mods
+        if: steps.plan.outputs.should_release == 'true'
+        uses: Nexus-Mods/upload-action@v1.0.0-beta.8
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_id: '7557689'
+          filename: ${{ steps.package.outputs.zip_path }}
+          version: ${{ steps.plan.outputs.version }}
+          display_name: 7D2D Version Compare v${{ steps.plan.outputs.version }}
+          description: ${{ steps.nexus_metadata.outputs.description }}
+          category: main
