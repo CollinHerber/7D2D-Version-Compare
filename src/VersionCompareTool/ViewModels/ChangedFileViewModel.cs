@@ -53,12 +53,13 @@ public sealed class ChangedFileViewModel : ObservableObject
     public bool HasModConflicts => Model.HasModConflicts;
 
     public string ModConflictCountText => Model.ModConflicts.Count == 1
-        ? "1 mod file"
-        : $"{Model.ModConflicts.Count} mod files";
+        ? "1 mod patch"
+        : $"{Model.ModConflicts.Count} mod patches";
 
     public string ModConflictSummary => Model.ModConflicts.Count == 1
-        ? $"Mod conflict: {Model.ModConflicts[0].ModRelativePath}"
-        : $"Mod conflicts: {string.Join(", ", Model.ModConflicts.Select(conflict => conflict.ModRelativePath))}";
+        ? $"Mod conflict: {FormatModConflict(Model.ModConflicts[0])}"
+        : $"Mod conflicts: {string.Join(", ", Model.ModConflicts.Take(3).Select(FormatModConflict))}"
+            + (Model.ModConflicts.Count > 3 ? $", +{Model.ModConflicts.Count - 3} more" : string.Empty);
 
     public IBrush CardBackground => (IsSelected, HasModConflicts) switch
     {
@@ -86,4 +87,16 @@ public sealed class ChangedFileViewModel : ObservableObject
     };
 
     public IBrush BadgeForeground => Brush.Parse("#FFF7E0");
+
+    private static string FormatModConflict(ModConflict conflict)
+    {
+        if (string.IsNullOrWhiteSpace(conflict.XPath))
+        {
+            return conflict.ModRelativePath;
+        }
+
+        return string.IsNullOrWhiteSpace(conflict.Operation)
+            ? $"{conflict.ModRelativePath}: {conflict.XPath}"
+            : $"{conflict.ModRelativePath}: {conflict.Operation} {conflict.XPath}";
+    }
 }

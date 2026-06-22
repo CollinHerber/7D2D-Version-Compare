@@ -191,6 +191,8 @@ public sealed class XmlVersionComparisonServiceTests : IDisposable
         var conflict = Assert.Single(file.ModConflicts);
         Assert.Equal("BetterAxes", conflict.ModName);
         Assert.Equal("Config/items.xml", conflict.ModRelativePath);
+        Assert.Equal("set", conflict.Operation);
+        Assert.Equal("/items/item[@name='meleeToolFireaxeIron']/@damage", conflict.XPath);
         Assert.Equal(1, comparison.ModConflictFiles);
         Assert.Equal(1, comparison.TotalModConflicts);
     }
@@ -210,11 +212,43 @@ public sealed class XmlVersionComparisonServiceTests : IDisposable
     }
 
     [Fact]
+    public void Compare_DoesNotFlagUnrelatedXPathPatchInChangedFile()
+    {
+        WriteFile("2.6", "Config/items.xml", """
+            <items>
+              <item name="changed" damage="38" />
+              <item name="untouched" damage="10" />
+            </items>
+            """);
+        WriteFile("3.0", "Config/items.xml", """
+            <items>
+              <item name="changed" damage="42" />
+              <item name="untouched" damage="10" />
+            </items>
+            """);
+        WriteModFile("BetterAxes", "Config/items.xml", """
+            <configs>
+              <set xpath="/items/item[@name='untouched']/@damage">15</set>
+            </configs>
+            """);
+
+        var comparison = CompareWithMod("BetterAxes");
+
+        var file = Assert.Single(comparison.ChangedFiles);
+        Assert.Empty(file.ModConflicts);
+        Assert.Equal(0, comparison.ModConflictFiles);
+    }
+
+    [Fact]
     public void ApplyModConflicts_ReusesExistingComparisonWithoutChangingDiffLines()
     {
         WriteFile("2.6", "Config/items.xml", "<items><item name=\"old\" /></items>");
         WriteFile("3.0", "Config/items.xml", "<items><item name=\"new\" /></items>");
-        WriteModFile("BetterAxes", "Config/items.xml", "<configs />");
+        WriteModFile("BetterAxes", "Config/items.xml", """
+            <configs>
+              <set xpath="/items/item[@name='old']">anything</set>
+            </configs>
+            """);
 
         var baseComparison = Compare();
         var service = CreateService();

@@ -1,8 +1,12 @@
 using DiffPlex.DiffBuilder;
 using DiffPlex.DiffBuilder.Model;
+using System.Collections;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Xml;
+using System.Xml.Linq;
+using System.Xml.XPath;
 
 namespace VersionCompareTool.Core;
 
@@ -45,13 +49,15 @@ public sealed class XmlVersionComparisonService
             throw new DirectoryNotFoundException($"End version directory was not found: {endDirectory}");
         }
 
-        var startCatalog = LoadXmlFiles(startDirectory, cancellationToken);
-        var endCatalog = LoadXmlFiles(endDirectory, cancellationToken);
+        var startDirectoryPath = Path.GetFullPath(startDirectory);
+        var endDirectoryPath = Path.GetFullPath(endDirectory);
+        var startCatalog = LoadXmlFiles(startDirectoryPath, cancellationToken);
+        var endCatalog = LoadXmlFiles(endDirectoryPath, cancellationToken);
         var cacheKey = new VersionComparisonCacheKey(
             startVersion,
             endVersion,
-            NormalizeDirectoryForCacheKey(startDirectory),
-            NormalizeDirectoryForCacheKey(endDirectory),
+            NormalizeDirectoryForCacheKey(startDirectoryPath),
+            NormalizeDirectoryForCacheKey(endDirectoryPath),
             startCatalog.Fingerprint,
             endCatalog.Fingerprint,
             ignoreWhitespaceChanges);
@@ -59,7 +65,15 @@ public sealed class XmlVersionComparisonService
         var cachedComparison = _cache.TryLoad(cacheKey, cancellationToken);
         if (cachedComparison is not null)
         {
-            return ApplyModConflicts(cachedComparison, modName, modDirectory, cancellationToken);
+            return ApplyModConflicts(
+                cachedComparison with
+                {
+                    StartDirectory = startDirectoryPath,
+                    EndDirectory = endDirectoryPath
+                },
+                modName,
+                modDirectory,
+                cancellationToken);
         }
 
         var comparison = BuildComparison(
@@ -68,7 +82,11 @@ public sealed class XmlVersionComparisonService
             startCatalog.Files,
             endCatalog.Files,
             ignoreWhitespaceChanges,
-            cancellationToken);
+            cancellationToken) with
+        {
+            StartDirectory = startDirectoryPath,
+            EndDirectory = endDirectoryPath
+        };
 
         _cache.Save(cacheKey, comparison, cancellationToken);
         return ApplyModConflicts(comparison, modName, modDirectory, cancellationToken);
@@ -95,12 +113,18 @@ public sealed class XmlVersionComparisonService
             };
         }
 
-        var modConflictIndex = LoadModConflictIndex(modName, modDirectory, cancellationToken);
+        var modPatchIndex = LoadModPatchIndex(modName, modDirectory, cancellationToken);
+        var changedNodeIndexes = new Dictionary<string, XmlChangedNodeIndex>(PathComparer);
         var changedFiles = comparison.ChangedFiles
             .Select(file =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                return file.WithModConflicts(FindModConflicts(file.RelativePath, modConflictIndex));
+                return file.WithModConflicts(FindModConflicts(
+                    file,
+                    modPatchIndex,
+                    comparison,
+                    changedNodeIndexes,
+                    cancellationToken));
             })
             .ToArray();
 
@@ -247,12 +271,12 @@ public sealed class XmlVersionComparisonService
             lines);
     }
 
-    private static Dictionary<string, List<ModConflict>> LoadModConflictIndex(
+    private static Dictionary<string, List<ModPatchOperation>> LoadModPatchIndex(
         string? modName,
         string? modDirectory,
         CancellationToken cancellationToken)
     {
-        var index = new Dictionary<string, List<ModConflict>>(PathComparer);
+        var index = new Dictionary<string, List<ModPatchOperation>>(PathComparer);
 
         if (string.IsNullOrWhiteSpace(modName)
             || string.IsNullOrWhiteSpace(modDirectory)
@@ -266,32 +290,305 @@ public sealed class XmlVersionComparisonService
             cancellationToken.ThrowIfCancellationRequested();
             var relativePath = NormalizeRelativePath(Path.GetRelativePath(modDirectory, filePath));
             var targetPath = NormalizeTargetPath(relativePath);
-
-            if (!index.TryGetValue(targetPath, out var conflicts))
+            var operations = LoadModPatchOperations(modName, relativePath, targetPath, filePath);
+            if (operations.Count == 0)
             {
-                conflicts = [];
-                index[targetPath] = conflicts;
+                continue;
             }
 
-            conflicts.Add(new ModConflict(modName, relativePath));
+            if (!index.TryGetValue(targetPath, out var patches))
+            {
+                patches = [];
+                index[targetPath] = patches;
+            }
+
+            patches.AddRange(operations);
         }
 
         return index;
     }
 
-    private static IReadOnlyList<ModConflict> FindModConflicts(
-        string changedFilePath,
-        Dictionary<string, List<ModConflict>> modConflictIndex)
+    private static IReadOnlyList<ModPatchOperation> LoadModPatchOperations(
+        string modName,
+        string modRelativePath,
+        string targetPath,
+        string filePath)
     {
-        if (modConflictIndex.Count == 0)
+        try
+        {
+            var document = XDocument.Load(filePath, LoadOptions.PreserveWhitespace);
+            return document.Descendants()
+                .Select(element => new
+                {
+                    Element = element,
+                    XPath = element.Attribute("xpath")?.Value
+                })
+                .Where(patch => !string.IsNullOrWhiteSpace(patch.XPath))
+                .Select(patch => new ModPatchOperation(
+                    modName,
+                    modRelativePath,
+                    targetPath,
+                    patch.Element.Name.LocalName,
+                    patch.XPath!))
+                .ToArray();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static IReadOnlyList<ModConflict> FindModConflicts(
+        ChangedFile changedFile,
+        Dictionary<string, List<ModPatchOperation>> modPatchIndex,
+        VersionComparison comparison,
+        Dictionary<string, XmlChangedNodeIndex> changedNodeIndexes,
+        CancellationToken cancellationToken)
+    {
+        if (modPatchIndex.Count == 0)
         {
             return [];
         }
 
-        var targetPath = NormalizeTargetPath(changedFilePath);
-        return modConflictIndex.TryGetValue(targetPath, out var conflicts)
-            ? conflicts.ToArray()
-            : [];
+        var targetPath = NormalizeTargetPath(changedFile.RelativePath);
+        if (!modPatchIndex.TryGetValue(targetPath, out var patches))
+        {
+            return [];
+        }
+
+        var changedNodeIndex = GetChangedNodeIndex(
+            changedFile,
+            comparison,
+            changedNodeIndexes,
+            cancellationToken);
+
+        return patches
+            .Where(patch => DoesPatchOverlapChangedNodes(patch, changedNodeIndex, cancellationToken))
+            .Select(patch => new ModConflict(
+                patch.ModName,
+                patch.ModRelativePath,
+                patch.Operation,
+                patch.XPath))
+            .ToArray();
+    }
+
+    private static XmlChangedNodeIndex GetChangedNodeIndex(
+        ChangedFile changedFile,
+        VersionComparison comparison,
+        Dictionary<string, XmlChangedNodeIndex> changedNodeIndexes,
+        CancellationToken cancellationToken)
+    {
+        var targetPath = NormalizeTargetPath(changedFile.RelativePath);
+        if (changedNodeIndexes.TryGetValue(targetPath, out var changedNodeIndex))
+        {
+            return changedNodeIndex;
+        }
+
+        changedNodeIndex = BuildChangedNodeIndex(changedFile, comparison, cancellationToken);
+        changedNodeIndexes[targetPath] = changedNodeIndex;
+        return changedNodeIndex;
+    }
+
+    private static XmlChangedNodeIndex BuildChangedNodeIndex(
+        ChangedFile changedFile,
+        VersionComparison comparison,
+        CancellationToken cancellationToken)
+    {
+        if (changedFile.ChangeType is FileChangeType.Added or FileChangeType.Removed
+            || string.IsNullOrWhiteSpace(comparison.StartDirectory)
+            || string.IsNullOrWhiteSpace(comparison.EndDirectory))
+        {
+            return XmlChangedNodeIndex.WholeFile;
+        }
+
+        var startPath = Path.Combine(
+            comparison.StartDirectory,
+            changedFile.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+        var endPath = Path.Combine(
+            comparison.EndDirectory,
+            changedFile.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+
+        if (!File.Exists(startPath) || !File.Exists(endPath))
+        {
+            return XmlChangedNodeIndex.WholeFile;
+        }
+
+        try
+        {
+            var startDocument = XDocument.Load(startPath, LoadOptions.PreserveWhitespace);
+            cancellationToken.ThrowIfCancellationRequested();
+            var endDocument = XDocument.Load(endPath, LoadOptions.PreserveWhitespace);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var startFingerprints = BuildXmlNodeFingerprints(startDocument);
+            var endFingerprints = BuildXmlNodeFingerprints(endDocument);
+            var changedPaths = startFingerprints.Keys
+                .Union(endFingerprints.Keys, StringComparer.Ordinal)
+                .Where(path => !startFingerprints.TryGetValue(path, out var startFingerprint)
+                    || !endFingerprints.TryGetValue(path, out var endFingerprint)
+                    || !string.Equals(startFingerprint, endFingerprint, StringComparison.Ordinal))
+                .ToHashSet(StringComparer.Ordinal);
+
+            return new XmlChangedNodeIndex(false, startDocument, endDocument, changedPaths);
+        }
+        catch
+        {
+            return XmlChangedNodeIndex.WholeFile;
+        }
+    }
+
+    private static Dictionary<string, string> BuildXmlNodeFingerprints(XDocument document)
+    {
+        var fingerprints = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (document.Root is null)
+        {
+            return fingerprints;
+        }
+
+        foreach (var element in document.Root.DescendantsAndSelf())
+        {
+            var elementPath = BuildElementPath(element);
+            fingerprints[elementPath] = BuildElementFingerprint(element);
+
+            foreach (var attribute in element.Attributes())
+            {
+                if (attribute.IsNamespaceDeclaration)
+                {
+                    continue;
+                }
+
+                fingerprints[$"{elementPath}/@{attribute.Name.LocalName}"] = attribute.Value;
+            }
+        }
+
+        return fingerprints;
+    }
+
+    private static string BuildElementFingerprint(XElement element)
+    {
+        var directText = string.Concat(element.Nodes().OfType<XText>().Select(text => text.Value));
+        return $"{element.Name.LocalName}|{directText.Trim()}";
+    }
+
+    private static bool DoesPatchOverlapChangedNodes(
+        ModPatchOperation patch,
+        XmlChangedNodeIndex changedNodeIndex,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (changedNodeIndex.IsWholeFileChange)
+        {
+            return true;
+        }
+
+        if (changedNodeIndex.ChangedPaths.Count == 0)
+        {
+            return false;
+        }
+
+        var targetPaths = EvaluatePatchTargetPaths(patch.XPath, changedNodeIndex.StartDocument)
+            .Concat(EvaluatePatchTargetPaths(patch.XPath, changedNodeIndex.EndDocument))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (targetPaths.Length == 0)
+        {
+            return false;
+        }
+
+        return targetPaths.Any(targetPath => changedNodeIndex.ChangedPaths.Any(
+            changedPath => AreRelatedXmlPaths(targetPath, changedPath)));
+    }
+
+    private static IEnumerable<string> EvaluatePatchTargetPaths(string xpath, XDocument? document)
+    {
+        if (document is null)
+        {
+            return [];
+        }
+
+        try
+        {
+            var result = document.XPathEvaluate(xpath);
+            if (result is string or double or bool || result is not IEnumerable nodes)
+            {
+                return [];
+            }
+
+            var paths = new List<string>();
+            foreach (var node in nodes)
+            {
+                switch (node)
+                {
+                    case XElement element:
+                        paths.Add(BuildElementPath(element));
+                        break;
+                    case XAttribute attribute:
+                        paths.Add($"{BuildElementPath(attribute.Parent!)}/@{attribute.Name.LocalName}");
+                        break;
+                }
+            }
+
+            return paths;
+        }
+        catch (XPathException)
+        {
+            return [];
+        }
+        catch (XmlException)
+        {
+            return [];
+        }
+    }
+
+    private static bool AreRelatedXmlPaths(string left, string right)
+    {
+        return string.Equals(left, right, StringComparison.Ordinal)
+            || left.StartsWith($"{right}/", StringComparison.Ordinal)
+            || right.StartsWith($"{left}/", StringComparison.Ordinal);
+    }
+
+    private static string BuildElementPath(XElement element)
+    {
+        var ancestors = element.Ancestors()
+            .Reverse()
+            .Append(element)
+            .Select(BuildElementPathSegment);
+
+        return "/" + string.Join("/", ancestors);
+    }
+
+    private static string BuildElementPathSegment(XElement element)
+    {
+        var identifier = GetElementIdentifier(element);
+        if (!string.IsNullOrWhiteSpace(identifier))
+        {
+            return $"{element.Name.LocalName}{identifier}";
+        }
+
+        var sameNameSiblings = element.Parent?.Elements(element.Name).ToArray();
+        if (sameNameSiblings is null || sameNameSiblings.Length <= 1)
+        {
+            return element.Name.LocalName;
+        }
+
+        var index = Array.IndexOf(sameNameSiblings, element) + 1;
+        return $"{element.Name.LocalName}[{index.ToString(CultureInfo.InvariantCulture)}]";
+    }
+
+    private static string? GetElementIdentifier(XElement element)
+    {
+        foreach (var attributeName in new[] { "name", "id", "class" })
+        {
+            var attribute = element.Attribute(attributeName);
+            if (attribute is not null && !string.IsNullOrWhiteSpace(attribute.Value))
+            {
+                return $"[@{attributeName}='{attribute.Value}']";
+            }
+        }
+
+        return null;
     }
 
     private static IReadOnlyList<DiffLine> BuildModifiedFileDiff(
@@ -411,4 +708,20 @@ public sealed class XmlVersionComparisonService
         string FullPath,
         long Length,
         long LastWriteUtcTicks);
+
+    private sealed record ModPatchOperation(
+        string ModName,
+        string ModRelativePath,
+        string TargetPath,
+        string Operation,
+        string XPath);
+
+    private sealed record XmlChangedNodeIndex(
+        bool IsWholeFileChange,
+        XDocument? StartDocument,
+        XDocument? EndDocument,
+        IReadOnlySet<string> ChangedPaths)
+    {
+        public static XmlChangedNodeIndex WholeFile { get; } = new(true, null, null, new HashSet<string>());
+    }
 }
