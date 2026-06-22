@@ -116,3 +116,7 @@ If a comparison looks stale after manually editing files, restart the app or del
 ## Contributing
 
 Developer setup, build commands, and release details are in [CONTRIBUTORS.md](CONTRIBUTORS.md).
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
