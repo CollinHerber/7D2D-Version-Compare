@@ -259,12 +259,16 @@ public sealed class XmlVersionComparisonServiceTests : IDisposable
         Assert.Contains(file.Lines, line =>
             line.Kind == DiffLineKind.Removed
             && line.Text.Contains("Map.Color", StringComparison.Ordinal));
-        Assert.Contains(file.Lines, line =>
+        var mapColorLine = Assert.Single(file.Lines, line =>
             line.Kind == DiffLineKind.Added
             && line.Text.Contains("MapColor", StringComparison.Ordinal));
-        Assert.Contains(file.Lines, line =>
+        var textureLine = Assert.Single(file.Lines, line =>
             line.Kind == DiffLineKind.Added
             && line.Text.Contains("Texture", StringComparison.Ordinal));
+        Assert.DoesNotContain(" />", mapColorLine.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(" />", textureLine.Text, StringComparison.Ordinal);
+        Assert.EndsWith("\"/>", mapColorLine.Text, StringComparison.Ordinal);
+        Assert.EndsWith("\"/>", textureLine.Text, StringComparison.Ordinal);
         Assert.DoesNotContain(file.Lines, line =>
             line.Kind is DiffLineKind.Added or DiffLineKind.Removed
             && line.Text.Contains("Material", StringComparison.Ordinal));
