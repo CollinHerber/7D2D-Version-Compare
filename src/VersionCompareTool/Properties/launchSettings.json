@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Cacheless": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "VERSION_COMPARE_DISABLE_CACHE": "1"
+      }
+    }
+  }
+}

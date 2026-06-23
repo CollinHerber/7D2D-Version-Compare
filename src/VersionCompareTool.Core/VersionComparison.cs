@@ -6,6 +6,7 @@ public sealed record VersionComparison(
     IReadOnlyList<ChangedFile> ChangedFiles,
     string? ModName = null,
     bool IsFromCache = false,
+    bool IsCacheDisabled = false,
     string? StartDirectory = null,
     string? EndDirectory = null)
 {

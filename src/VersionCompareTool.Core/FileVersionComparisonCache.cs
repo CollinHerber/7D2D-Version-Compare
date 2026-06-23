@@ -7,7 +7,7 @@ namespace VersionCompareTool.Core;
 
 public sealed class FileVersionComparisonCache : IVersionComparisonCache
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 3;
     private readonly string _cacheDirectory;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.General)
@@ -126,6 +126,7 @@ public sealed class FileVersionComparisonCache : IVersionComparisonCache
                 .Select(file => new CachedChangedFile(
                     file.RelativePath,
                     file.ChangeType,
+                    file.ComparisonKind,
                     file.Additions,
                     file.Deletions,
                     file.Lines
@@ -155,7 +156,8 @@ public sealed class FileVersionComparisonCache : IVersionComparisonCache
                             line.NewLineNumber,
                             line.Kind,
                             line.Text))
-                        .ToArray()))
+                        .ToArray(),
+                    file.ComparisonKind))
                 .ToArray());
     }
 
@@ -173,6 +175,7 @@ public sealed class FileVersionComparisonCache : IVersionComparisonCache
     private sealed record CachedChangedFile(
         string RelativePath,
         FileChangeType ChangeType,
+        FileComparisonKind ComparisonKind,
         int Additions,
         int Deletions,
         CachedDiffLine[] Lines);
