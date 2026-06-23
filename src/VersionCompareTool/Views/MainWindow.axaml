@@ -28,13 +28,62 @@
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
+        <Style Selector="ScrollBar">
+            <Setter Property="Background" Value="#11181D"/>
+            <Setter Property="AllowAutoHide" Value="False"/>
+        </Style>
+        <Style Selector="ScrollBar:vertical">
+            <Setter Property="Width" Value="12"/>
+            <Setter Property="MinWidth" Value="12"/>
+            <Setter Property="Margin" Value="1,0,1,0"/>
+        </Style>
+        <Style Selector="ScrollBar:vertical:pointerover">
+            <Setter Property="Width" Value="15"/>
+            <Setter Property="MinWidth" Value="15"/>
+        </Style>
+        <Style Selector="ScrollBar:vertical:pressed">
+            <Setter Property="Width" Value="15"/>
+            <Setter Property="MinWidth" Value="15"/>
+        </Style>
+        <Style Selector="ScrollBar:horizontal">
+            <Setter Property="Height" Value="12"/>
+            <Setter Property="MinHeight" Value="12"/>
+            <Setter Property="Margin" Value="0,1,0,1"/>
+        </Style>
+        <Style Selector="ScrollBar:horizontal:pointerover">
+            <Setter Property="Height" Value="15"/>
+            <Setter Property="MinHeight" Value="15"/>
+        </Style>
+        <Style Selector="ScrollBar:horizontal:pressed">
+            <Setter Property="Height" Value="15"/>
+            <Setter Property="MinHeight" Value="15"/>
+        </Style>
+        <Style Selector="ScrollBar /template/ Thumb">
+            <Setter Property="Background" Value="#4F6675"/>
+            <Setter Property="BorderBrush" Value="#6E8797"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="MinWidth" Value="9"/>
+            <Setter Property="MinHeight" Value="9"/>
+        </Style>
+        <Style Selector="ScrollBar /template/ Thumb:pointerover">
+            <Setter Property="Background" Value="#6D8798"/>
+            <Setter Property="BorderBrush" Value="#9BB0BD"/>
+            <Setter Property="MinWidth" Value="12"/>
+            <Setter Property="MinHeight" Value="12"/>
+        </Style>
+        <Style Selector="ScrollBar /template/ Thumb:pressed">
+            <Setter Property="Background" Value="#8DA6B5"/>
+            <Setter Property="BorderBrush" Value="#C1D0D8"/>
+            <Setter Property="MinWidth" Value="12"/>
+            <Setter Property="MinHeight" Value="12"/>
+        </Style>
         <Style Selector="ListBox.file-list">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
         </Style>
         <Style Selector="ListBox.file-list ListBoxItem">
             <Setter Property="Padding" Value="0"/>
-            <Setter Property="Margin" Value="0,0,0,4"/>
+            <Setter Property="Margin" Value="0,0,18,4"/>
         </Style>
         <Style Selector="TreeView.folder-tree">
             <Setter Property="Background" Value="Transparent"/>
@@ -43,7 +92,7 @@
         <Style Selector="TreeView.folder-tree TreeViewItem"
                x:DataType="vm:FileTreeNodeViewModel">
             <Setter Property="Padding" Value="0"/>
-            <Setter Property="Margin" Value="0,0,0,3"/>
+            <Setter Property="Margin" Value="0,0,18,3"/>
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
         </Style>
         <Style Selector="ListBox.diff-viewer">
@@ -52,7 +101,8 @@
         </Style>
         <Style Selector="ListBox.diff-viewer ListBoxItem">
             <Setter Property="Padding" Value="0"/>
-            <Setter Property="Margin" Value="0"/>
+            <Setter Property="Margin" Value="0,0,18,0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         </Style>
         <Style Selector="Button.icon-button">
             <Setter Property="Width" Value="32"/>
@@ -130,6 +180,10 @@
                                       IsChecked="{Binding IgnoreWhitespaceChanges, Mode=TwoWay}"
                                       Foreground="#D7E0E6"
                                       FontSize="12"/>
+                            <CheckBox Content="Side-by-side diff"
+                                      IsChecked="{Binding IsSideBySideDiffView, Mode=TwoWay}"
+                                      Foreground="#D7E0E6"
+                                      FontSize="12"/>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -160,7 +214,8 @@
                              IsVisible="{Binding IsFlatFileViewVisible}"
                              ItemsSource="{Binding ChangedFiles}"
                              SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                             ScrollViewer.AllowAutoHide="False"
+                             ScrollViewer.VerticalScrollBarVisibility="Visible">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:ChangedFileViewModel">
                                 <Border Padding="8,6"
@@ -187,6 +242,15 @@
                                                     Background="{Binding BadgeBackground}">
                                                 <TextBlock Text="{Binding ChangeTypeText}"
                                                            Foreground="{Binding BadgeForeground}"
+                                                           FontSize="10"
+                                                           FontWeight="SemiBold"/>
+                                            </Border>
+                                            <Border IsVisible="{Binding IsBinaryAsset}"
+                                                    Padding="6,2"
+                                                    CornerRadius="4"
+                                                    Background="{Binding FileKindBadgeBackground}">
+                                                <TextBlock Text="ICON"
+                                                           Foreground="#E7F5FF"
                                                            FontSize="10"
                                                            FontWeight="SemiBold"/>
                                             </Border>
@@ -237,7 +301,8 @@
                               IsVisible="{Binding IsFolderViewVisible}"
                               ItemsSource="{Binding FileTreeNodes}"
                               SelectedItem="{Binding SelectedFileTreeNode, Mode=TwoWay}"
-                              ScrollViewer.VerticalScrollBarVisibility="Auto">
+                              ScrollViewer.AllowAutoHide="False"
+                              ScrollViewer.VerticalScrollBarVisibility="Visible">
                         <TreeView.ItemTemplate>
                             <TreeDataTemplate x:DataType="vm:FileTreeNodeViewModel"
                                               ItemsSource="{Binding Children}">
@@ -287,6 +352,15 @@
                                                         Background="{Binding BadgeBackground}">
                                                     <TextBlock Text="{Binding ChangeTypeText}"
                                                                Foreground="{Binding BadgeForeground}"
+                                                               FontSize="10"
+                                                               FontWeight="SemiBold"/>
+                                                </Border>
+                                                <Border IsVisible="{Binding IsBinaryAsset}"
+                                                        Padding="6,2"
+                                                        CornerRadius="4"
+                                                        Background="{Binding FileKindBadgeBackground}">
+                                                    <TextBlock Text="ICON"
+                                                               Foreground="#E7F5FF"
                                                                FontSize="10"
                                                                FontWeight="SemiBold"/>
                                                 </Border>
@@ -393,18 +467,19 @@
                             BorderBrush="#2B3842"
                             BorderThickness="1"
                             CornerRadius="7">
-                        <TextBlock Text="Select a changed XML file to view its diff."
+                        <TextBlock Text="Select a changed file to view its diff."
                                    Foreground="#91A2AD"
                                    FontSize="15"/>
                     </Border>
 
-                    <ListBox IsVisible="{Binding HasSelectedFile}"
+                    <ListBox IsVisible="{Binding IsInlineDiffViewVisible}"
                              x:Name="DiffListBox"
                              Classes="diff-viewer"
                              ItemsSource="{Binding DiffLines}"
                              SelectedItem="{Binding SelectedDiffLine, Mode=TwoWay}"
                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                             ScrollViewer.AllowAutoHide="False"
+                             ScrollViewer.VerticalScrollBarVisibility="Visible">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:DiffLineViewModel">
                                 <Border Background="{Binding Background}"
@@ -447,6 +522,87 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+
+                    <Grid IsVisible="{Binding IsSideBySideDiffViewVisible}"
+                          ColumnDefinitions="*,6,*">
+                        <ListBox x:Name="OldSideBySideListBox"
+                                 Grid.Column="0"
+                                 Classes="diff-viewer"
+                                 MinWidth="180"
+                                 ItemsSource="{Binding SideBySideDiffRows}"
+                                 SelectedItem="{Binding SelectedSideBySideDiffRow, Mode=TwoWay}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                 ScrollViewer.AllowAutoHide="False"
+                                 ScrollViewer.VerticalScrollBarVisibility="Hidden">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:SideBySideDiffRowViewModel">
+                                    <Border Background="{Binding OldBackground}"
+                                            BorderBrush="{Binding OldBorderBrush}"
+                                            BorderThickness="0,0,1,1"
+                                            MinHeight="26">
+                                        <Grid ColumnDefinitions="64,*">
+                                            <TextBlock Text="{Binding OldLineNumber}"
+                                                       Foreground="{Binding OldMutedForeground}"
+                                                       FontFamily="Cascadia Mono,Consolas,monospace"
+                                                       FontSize="12"
+                                                       HorizontalAlignment="Right"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,12,0"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding OldText}"
+                                                       Foreground="{Binding OldForeground}"
+                                                       FontFamily="Cascadia Mono,Consolas,monospace"
+                                                       FontSize="13"
+                                                       VerticalAlignment="Center"
+                                                       TextWrapping="NoWrap"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <GridSplitter Grid.Column="1"
+                                      Width="6"
+                                      Background="#24313A"
+                                      ResizeDirection="Columns"
+                                      ResizeBehavior="PreviousAndNext"/>
+
+                        <ListBox x:Name="NewSideBySideListBox"
+                                 Grid.Column="2"
+                                 Classes="diff-viewer"
+                                 MinWidth="180"
+                                 ItemsSource="{Binding SideBySideDiffRows}"
+                                 SelectedItem="{Binding SelectedSideBySideDiffRow, Mode=TwoWay}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                 ScrollViewer.AllowAutoHide="False"
+                                 ScrollViewer.VerticalScrollBarVisibility="Visible">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:SideBySideDiffRowViewModel">
+                                    <Border Background="{Binding NewBackground}"
+                                            BorderBrush="{Binding NewBorderBrush}"
+                                            BorderThickness="0,0,0,1"
+                                            MinHeight="26">
+                                        <Grid ColumnDefinitions="64,*">
+                                            <TextBlock Text="{Binding NewLineNumber}"
+                                                       Foreground="{Binding NewMutedForeground}"
+                                                       FontFamily="Cascadia Mono,Consolas,monospace"
+                                                       FontSize="12"
+                                                       HorizontalAlignment="Right"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,12,0"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding NewText}"
+                                                       Foreground="{Binding NewForeground}"
+                                                       FontFamily="Cascadia Mono,Consolas,monospace"
+                                                       FontSize="13"
+                                                       VerticalAlignment="Center"
+                                                       TextWrapping="NoWrap"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
                 </Grid>
             </Grid>
         </Grid>

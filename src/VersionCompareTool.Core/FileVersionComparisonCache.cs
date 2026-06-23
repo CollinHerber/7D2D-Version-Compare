@@ -7,7 +7,7 @@ namespace VersionCompareTool.Core;
 
 public sealed class FileVersionComparisonCache : IVersionComparisonCache
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 4;
     private readonly string _cacheDirectory;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.General)
@@ -126,6 +126,7 @@ public sealed class FileVersionComparisonCache : IVersionComparisonCache
                 .Select(file => new CachedChangedFile(
                     file.RelativePath,
                     file.ChangeType,
+                    file.ComparisonKind,
                     file.Additions,
                     file.Deletions,
                     file.Lines
@@ -133,7 +134,9 @@ public sealed class FileVersionComparisonCache : IVersionComparisonCache
                             line.OldLineNumber,
                             line.NewLineNumber,
                             line.Kind,
-                            line.Text))
+                            line.Text,
+                            line.OldText,
+                            line.NewText))
                         .ToArray()))
                 .ToArray());
     }
@@ -154,8 +157,13 @@ public sealed class FileVersionComparisonCache : IVersionComparisonCache
                             line.OldLineNumber,
                             line.NewLineNumber,
                             line.Kind,
-                            line.Text))
-                        .ToArray()))
+                            line.Text)
+                        {
+                            OldText = line.OldText ?? line.Text,
+                            NewText = line.NewText ?? line.Text
+                        })
+                        .ToArray(),
+                    file.ComparisonKind))
                 .ToArray());
     }
 
@@ -173,6 +181,7 @@ public sealed class FileVersionComparisonCache : IVersionComparisonCache
     private sealed record CachedChangedFile(
         string RelativePath,
         FileChangeType ChangeType,
+        FileComparisonKind ComparisonKind,
         int Additions,
         int Deletions,
         CachedDiffLine[] Lines);
@@ -181,5 +190,7 @@ public sealed class FileVersionComparisonCache : IVersionComparisonCache
         int? OldLineNumber,
         int? NewLineNumber,
         DiffLineKind Kind,
-        string Text);
+        string Text,
+        string? OldText,
+        string? NewText);
 }

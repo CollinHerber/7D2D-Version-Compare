@@ -5,7 +5,10 @@ public sealed record VersionComparison(
     string EndVersion,
     IReadOnlyList<ChangedFile> ChangedFiles,
     string? ModName = null,
-    bool IsFromCache = false)
+    bool IsFromCache = false,
+    bool IsCacheDisabled = false,
+    string? StartDirectory = null,
+    string? EndDirectory = null)
 {
     public int AddedFiles => ChangedFiles.Count(file => file.ChangeType == FileChangeType.Added);
 

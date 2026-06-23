@@ -8,6 +8,7 @@ public sealed record ChangedFile
         int additions,
         int deletions,
         IReadOnlyList<DiffLine> lines,
+        FileComparisonKind comparisonKind = FileComparisonKind.XmlText,
         IReadOnlyList<ModConflict>? modConflicts = null)
     {
         RelativePath = relativePath;
@@ -15,6 +16,7 @@ public sealed record ChangedFile
         Additions = additions;
         Deletions = deletions;
         Lines = lines;
+        ComparisonKind = comparisonKind;
         ModConflicts = modConflicts ?? [];
     }
 
@@ -28,11 +30,15 @@ public sealed record ChangedFile
 
     public IReadOnlyList<DiffLine> Lines { get; }
 
+    public FileComparisonKind ComparisonKind { get; }
+
     public IReadOnlyList<ModConflict> ModConflicts { get; }
 
     public int TotalChanges => Additions + Deletions;
 
     public bool HasModConflicts => ModConflicts.Count > 0;
+
+    public bool IsXmlText => ComparisonKind == FileComparisonKind.XmlText;
 
     public ChangedFile WithModConflicts(IReadOnlyList<ModConflict> modConflicts)
     {
@@ -42,6 +48,7 @@ public sealed record ChangedFile
             Additions,
             Deletions,
             Lines,
+            ComparisonKind,
             modConflicts);
     }
 }

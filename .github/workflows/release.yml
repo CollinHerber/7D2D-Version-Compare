@@ -65,6 +65,9 @@ jobs:
           -p:Optimize=true
           -p:DebugType=none
           -p:DebugSymbols=false
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
           -p:Version=${{ steps.plan.outputs.version }}
           -o artifacts/publish/win-x64
 
@@ -132,6 +135,16 @@ jobs:
           }
 
           $appExe = Join-Path $publishPath "VersionCompareTool.exe"
+          if (-not (Test-Path $appExe)) {
+            throw "Release artifact is missing VersionCompareTool.exe."
+          }
+
+          $rootDllFiles = @(Get-ChildItem -Path $publishPath -Filter *.dll -File)
+          if ($rootDllFiles.Count -gt 0) {
+            $paths = $rootDllFiles | ForEach-Object { $_.FullName }
+            throw "Release artifact contains root dependency DLLs instead of a bundled single-file executable: $($paths -join ', ')"
+          }
+
           if (Test-FileContainsAsciiText -Path $appExe -Text "WithDeveloperTools") {
             throw "Release executable contains Avalonia developer tools."
           }

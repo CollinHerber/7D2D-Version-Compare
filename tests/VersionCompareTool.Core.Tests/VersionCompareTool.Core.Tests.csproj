@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\VersionCompareTool.Core\VersionCompareTool.Core.csproj" />
+    <ProjectReference Include="..\..\src\VersionCompareTool\VersionCompareTool.csproj" />
   </ItemGroup>
 
 </Project>

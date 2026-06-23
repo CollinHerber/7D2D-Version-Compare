@@ -1,0 +1,15 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Cacheless" type="DotNetProject" factoryName=".NET Project">
+    <option name="PROJECT_PATH" value="$PROJECT_DIR$/src/VersionCompareTool/VersionCompareTool.csproj" />
+    <option name="PROJECT_EXE_PATH_TRACKING" value="1" />
+    <option name="PROJECT_ARGUMENTS_TRACKING" value="1" />
+    <option name="PROJECT_WORKING_DIRECTORY_TRACKING" value="1" />
+    <option name="PASS_PARENT_ENVS" value="1" />
+    <envs>
+      <env name="VERSION_COMPARE_DISABLE_CACHE" value="1" />
+    </envs>
+    <method v="2">
+      <option name="Build" />
+    </method>
+  </configuration>
+</component>
