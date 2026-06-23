@@ -204,6 +204,11 @@ public sealed class XmlVersionComparisonServiceTests : IDisposable
         Assert.DoesNotContain(file.Lines, line =>
             line.Kind is DiffLineKind.Added or DiffLineKind.Removed
             && line.Text.Contains("EconomicValue", StringComparison.Ordinal));
+        var textureLine = Assert.Single(file.Lines, line =>
+            line.Kind == DiffLineKind.Context
+            && line.Text.Contains("Texture", StringComparison.Ordinal));
+        Assert.DoesNotContain(" />", textureLine.OldText, StringComparison.Ordinal);
+        Assert.Contains(" />", textureLine.NewText, StringComparison.Ordinal);
         Assert.Contains(file.Lines, line =>
             line.Kind == DiffLineKind.Removed
             && line.Text.Contains("MC_outdoor", StringComparison.Ordinal));
@@ -265,10 +270,8 @@ public sealed class XmlVersionComparisonServiceTests : IDisposable
         var textureLine = Assert.Single(file.Lines, line =>
             line.Kind == DiffLineKind.Added
             && line.Text.Contains("Texture", StringComparison.Ordinal));
-        Assert.DoesNotContain(" />", mapColorLine.Text, StringComparison.Ordinal);
-        Assert.DoesNotContain(" />", textureLine.Text, StringComparison.Ordinal);
-        Assert.EndsWith("\"/>", mapColorLine.Text, StringComparison.Ordinal);
-        Assert.EndsWith("\"/>", textureLine.Text, StringComparison.Ordinal);
+        Assert.Contains(" />", mapColorLine.Text, StringComparison.Ordinal);
+        Assert.Contains(" />", textureLine.Text, StringComparison.Ordinal);
         Assert.DoesNotContain(file.Lines, line =>
             line.Kind is DiffLineKind.Added or DiffLineKind.Removed
             && line.Text.Contains("Material", StringComparison.Ordinal));
@@ -411,6 +414,38 @@ public sealed class XmlVersionComparisonServiceTests : IDisposable
         Assert.Equal(
             firstComparison.ChangedFiles.Single().Lines.Select(line => line.Text),
             secondComparison.ChangedFiles.Single().Lines.Select(line => line.Text));
+    }
+
+    [Fact]
+    public void Compare_PreservesSideSpecificWhitespaceRowsWhenLoadedFromCache()
+    {
+        WriteFile("2.6", "Config/blocks.xml", """
+            <blocks>
+              <block name="resourceRockSmall">
+                <property name="Texture" value="1"/>
+                <property name="FilterTags" value="MC_outdoor"/>
+              </block>
+            </blocks>
+            """);
+        WriteFile("3.0", "Config/blocks.xml", """
+            <blocks>
+              <block name="resourceRockSmall">
+                <property name="Texture" value="1" />
+                <property name="FilterTags" value="MC_outdoor,SC_terrain" />
+              </block>
+            </blocks>
+            """);
+
+        var firstComparison = Compare(ignoreWhitespaceChanges: true);
+        var secondComparison = Compare(ignoreWhitespaceChanges: true);
+
+        Assert.False(firstComparison.IsFromCache);
+        Assert.True(secondComparison.IsFromCache);
+        var textureLine = Assert.Single(secondComparison.ChangedFiles.Single().Lines, line =>
+            line.Kind == DiffLineKind.Context
+            && line.Text.Contains("Texture", StringComparison.Ordinal));
+        Assert.DoesNotContain(" />", textureLine.OldText, StringComparison.Ordinal);
+        Assert.Contains(" />", textureLine.NewText, StringComparison.Ordinal);
     }
 
     [Fact]

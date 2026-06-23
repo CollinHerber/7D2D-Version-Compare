@@ -28,6 +28,10 @@ public sealed class DiffLineViewModel
 
     public string Text => Model.Text;
 
+    public string OldText => Model.OldText;
+
+    public string NewText => Model.NewText;
+
     public IBrush Background => Model.Kind switch
     {
         DiffLineKind.Added => Brush.Parse("#143322"),

@@ -20,9 +20,9 @@ public sealed class SideBySideDiffRowViewModel
 
     public string NewLineNumber => NewLine?.NewLineNumber ?? string.Empty;
 
-    public string OldText => OldLine?.Text ?? string.Empty;
+    public string OldText => OldLine?.OldText ?? string.Empty;
 
-    public string NewText => NewLine?.Text ?? string.Empty;
+    public string NewText => NewLine?.NewText ?? string.Empty;
 
     public IBrush OldBackground => OldLine?.Background ?? EmptyBackground;
 

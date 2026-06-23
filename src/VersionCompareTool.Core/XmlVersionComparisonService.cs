@@ -699,11 +699,7 @@ public sealed class XmlVersionComparisonService
 
             if (IsContextLine(oldPiece, newPiece))
             {
-                lines.Add(new DiffLine(
-                    oldPiece?.Position,
-                    newPiece?.Position,
-                    DiffLineKind.Context,
-                    newPiece?.Text ?? oldPiece?.Text ?? string.Empty));
+                lines.Add(CreateContextDiffLine(oldPiece, newPiece));
                 continue;
             }
 
@@ -712,11 +708,7 @@ public sealed class XmlVersionComparisonService
                 && newPiece is not null
                 && AreEquivalentIgnoringWhitespace(oldPiece.Text, newPiece.Text))
             {
-                lines.Add(new DiffLine(
-                    oldPiece.Position,
-                    newPiece.Position,
-                    DiffLineKind.Context,
-                    newPiece.Text ?? oldPiece.Text ?? string.Empty));
+                lines.Add(CreateContextDiffLine(oldPiece, newPiece));
                 continue;
             }
 
@@ -740,18 +732,24 @@ public sealed class XmlVersionComparisonService
         }
 
         return ignoreWhitespaceChanges
-            ? NormalizeWhitespaceIgnoredDisplayLines(HideWhitespaceOnlyDiffLines(lines))
+            ? HideWhitespaceOnlyDiffLines(lines)
             : lines;
     }
 
-    private static IReadOnlyList<DiffLine> NormalizeWhitespaceIgnoredDisplayLines(IReadOnlyList<DiffLine> lines)
+    private static DiffLine CreateContextDiffLine(DiffPiece? oldPiece, DiffPiece? newPiece)
     {
-        return lines
-            .Select(line => line with
-            {
-                Text = NormalizeWhitespaceIgnoredDisplayText(line.Text)
-            })
-            .ToArray();
+        var oldText = oldPiece?.Text ?? newPiece?.Text ?? string.Empty;
+        var newText = newPiece?.Text ?? oldPiece?.Text ?? string.Empty;
+
+        return new DiffLine(
+            oldPiece?.Position,
+            newPiece?.Position,
+            DiffLineKind.Context,
+            newText)
+        {
+            OldText = oldText,
+            NewText = newText
+        };
     }
 
     private static IReadOnlyList<DiffLine> HideWhitespaceOnlyDiffLines(IReadOnlyList<DiffLine> lines)
@@ -827,7 +825,11 @@ public sealed class XmlVersionComparisonService
                 removedLines[match.OldIndex].OldLineNumber,
                 addedLines[match.NewIndex].NewLineNumber,
                 DiffLineKind.Context,
-                addedLines[match.NewIndex].Text));
+                addedLines[match.NewIndex].Text)
+            {
+                OldText = removedLines[match.OldIndex].Text,
+                NewText = addedLines[match.NewIndex].Text
+            });
             removedIndex = match.OldIndex + 1;
             addedIndex = match.NewIndex + 1;
         }
@@ -1028,31 +1030,6 @@ public sealed class XmlVersionComparisonService
         }
 
         return builder.ToString();
-    }
-
-    private static string NormalizeWhitespaceIgnoredDisplayText(string text)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return text;
-        }
-
-        var trimmedEnd = text.TrimEnd();
-        if (!trimmedEnd.EndsWith("/>", StringComparison.Ordinal))
-        {
-            return trimmedEnd;
-        }
-
-        var slashIndex = trimmedEnd.Length - 2;
-        var lastContentIndex = slashIndex - 1;
-        while (lastContentIndex >= 0 && char.IsWhiteSpace(trimmedEnd[lastContentIndex]))
-        {
-            lastContentIndex--;
-        }
-
-        return lastContentIndex == slashIndex - 1
-            ? trimmedEnd
-            : $"{trimmedEnd[..(lastContentIndex + 1)]}/>";
     }
 
     private static bool IsContextLine(DiffPiece? oldPiece, DiffPiece? newPiece)
