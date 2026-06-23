@@ -39,6 +39,12 @@ dotnet run --project src/VersionCompareTool/VersionCompareTool.csproj
 
 During source development, the app resolves `Versions` and `Mods` from the repository root. For packaged builds, those folders sit beside `VersionCompareTool.exe`.
 
+Use the checked-in `Cacheless` run configuration for targeted comparison testing without reading or writing the local diff cache. The same mode is available from the command line:
+
+```powershell
+dotnet run --project src/VersionCompareTool/VersionCompareTool.csproj --launch-profile Cacheless
+```
+
 ## Test Data
 
 Create local test folders like this:
@@ -49,17 +55,31 @@ Versions/
     Data/
       Config/
         items.xml
+      ItemIcons/
+        meleeToolFireaxeIron.png
   3.0/
     Data/
       Config/
         items.xml
+      ItemIcons/
+        meleeToolFireaxeIron.png
 Mods/
   ExampleMod/
     Config/
       items.xml
 ```
 
-The app compares only `*.xml` files. Paths are normalized to `/`, compared case-insensitively, and mod conflict matching ignores a leading `Data/` segment.
+The app compares `*.xml` files plus all files under any `ItemIcons` directory. Paths are normalized to `/`, compared case-insensitively, and mod conflict matching ignores a leading `Data/` segment for XML patch targets.
+
+## Saved Settings
+
+The UI persists selected versions, selected mod, folder view, mod-conflict filtering, whitespace filtering, and diff layout to:
+
+```text
+%LOCALAPPDATA%/7D2D-Version-Compare/settings.json
+```
+
+Settings are separate from the diff cache. Corrupt or missing settings are ignored and replaced with defaults on the next save.
 
 ## Diff Cache
 
@@ -69,7 +89,7 @@ The default diff cache lives under:
 %LOCALAPPDATA%/7D2D-Version-Compare/DiffCache
 ```
 
-The cache key includes the selected start/end versions, resolved folder paths, and a metadata fingerprint for each version folder. The fingerprint tracks XML relative paths, file counts, total bytes, latest write time, and a metadata hash over path, size, and last-write timestamps.
+The cache key includes the selected start/end versions, resolved folder paths, and a metadata fingerprint for each version folder. The fingerprint tracks comparable relative paths, file counts, total bytes, latest write time, and a metadata hash over path, size, and last-write timestamps.
 
 The cache stores only the base version diff. Mod conflict overlays are applied after the base diff is loaded, which keeps mod selection independent from the version diff cache.
 
@@ -82,6 +102,7 @@ dotnet publish src/VersionCompareTool/VersionCompareTool.csproj `
   --self-contained true `
   -p:PublishSingleFile=true `
   -p:IncludeNativeLibrariesForSelfExtract=true `
+  -p:EnableCompressionInSingleFile=true `
   -o artifacts/publish/win-x64
 ```
 
