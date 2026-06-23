@@ -32,9 +32,15 @@ public sealed class ChangedFileViewModel : ObservableObject
 
     public string ChangeTypeText => Model.ChangeType.ToString();
 
+    public string FileKindText => Model.ComparisonKind == FileComparisonKind.BinaryAsset
+        ? "Item icon"
+        : "XML";
+
     public string AdditionsText => Model.Additions > 0 ? $"+{Model.Additions}" : string.Empty;
 
     public string DeletionsText => Model.Deletions > 0 ? $"-{Model.Deletions}" : string.Empty;
+
+    public bool IsBinaryAsset => Model.ComparisonKind == FileComparisonKind.BinaryAsset;
 
     public bool IsSelected
     {
@@ -87,6 +93,10 @@ public sealed class ChangedFileViewModel : ObservableObject
     };
 
     public IBrush BadgeForeground => Brush.Parse("#FFF7E0");
+
+    public IBrush FileKindBadgeBackground => IsBinaryAsset
+        ? Brush.Parse("#275A7A")
+        : Brush.Parse("#27353E");
 
     private static string FormatModConflict(ModConflict conflict)
     {

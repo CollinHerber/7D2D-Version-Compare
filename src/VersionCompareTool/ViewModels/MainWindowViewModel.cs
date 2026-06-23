@@ -17,6 +17,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly string _versionRoot;
     private readonly string _modRoot;
     private readonly XmlVersionComparisonService _comparisonService;
+    private readonly AppSettingsStore _settingsStore;
+    private AppSettings _settings;
     private CancellationTokenSource? _versionComparisonCts;
     private CancellationTokenSource? _modConflictCts;
     private VersionComparison? _baseComparison;
@@ -28,6 +30,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _isUpdatingSelections;
     private bool _isApplyingTreeSelection;
     private bool _isSyncingTreeSelection;
+    private bool _isSyncingSideBySideSelection;
 
     [ObservableProperty]
     private string? selectedStartVersion;
@@ -48,13 +51,19 @@ public partial class MainWindowViewModel : ViewModelBase
     private DiffLineViewModel? selectedDiffLine;
 
     [ObservableProperty]
+    private SideBySideDiffRowViewModel? selectedSideBySideDiffRow;
+
+    [ObservableProperty]
     private bool isFolderView;
+
+    [ObservableProperty]
+    private bool isSideBySideDiffView = true;
 
     [ObservableProperty]
     private bool showOnlyModConflicts;
 
     [ObservableProperty]
-    private bool ignoreWhitespaceChanges;
+    private bool ignoreWhitespaceChanges = true;
 
     [ObservableProperty]
     private string statusText = "Loading versions and mods...";
@@ -84,6 +93,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private ObservableCollection<DiffLineViewModel> diffLines = [];
 
     [ObservableProperty]
+    private ObservableCollection<SideBySideDiffRowViewModel> sideBySideDiffRows = [];
+
+    [ObservableProperty]
     private string diffNavigationStatus = "0 / 0";
 
     public MainWindowViewModel()
@@ -98,10 +110,21 @@ public partial class MainWindowViewModel : ViewModelBase
         string versionRoot,
         string modRoot,
         XmlVersionComparisonService comparisonService)
+        : this(versionRoot, modRoot, comparisonService, AppSettingsStore.CreateDefault())
+    {
+    }
+
+    public MainWindowViewModel(
+        string versionRoot,
+        string modRoot,
+        XmlVersionComparisonService comparisonService,
+        AppSettingsStore settingsStore)
     {
         _versionRoot = versionRoot;
         _modRoot = modRoot;
         _comparisonService = comparisonService;
+        _settingsStore = settingsStore;
+        _settings = _settingsStore.Load();
 
         _ = InitializeAsync();
     }
@@ -122,6 +145,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool IsFolderViewVisible => IsFolderView;
 
+    public bool IsInlineDiffViewVisible => HasSelectedFile && !IsSideBySideDiffView;
+
+    public bool IsSideBySideDiffViewVisible => HasSelectedFile && IsSideBySideDiffView;
+
     partial void OnSelectedStartVersionChanged(string? value)
     {
         if (_isUpdatingSelections)
@@ -139,6 +166,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         _isUpdatingSelections = false;
+        SaveCurrentSettings();
         QueueVersionComparison();
     }
 
@@ -149,6 +177,7 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        SaveCurrentSettings();
         QueueVersionComparison();
     }
 
@@ -164,6 +193,7 @@ public partial class MainWindowViewModel : ViewModelBase
             ShowOnlyModConflicts = false;
         }
 
+        SaveCurrentSettings();
         QueueModConflictScan();
     }
 
@@ -215,6 +245,30 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         UpdateCurrentDiffAreaFromSelectedLine(value);
+
+        if (!_isSyncingSideBySideSelection)
+        {
+            SyncSelectedSideBySideDiffRow(value);
+        }
+    }
+
+    partial void OnSelectedSideBySideDiffRowChanged(SideBySideDiffRowViewModel? value)
+    {
+        if (_isSyncingSideBySideSelection || value?.PrimaryLine is null)
+        {
+            return;
+        }
+
+        _isSyncingSideBySideSelection = true;
+
+        try
+        {
+            SelectedDiffLine = value.PrimaryLine;
+        }
+        finally
+        {
+            _isSyncingSideBySideSelection = false;
+        }
     }
 
     partial void OnIsBusyChanged(bool value)
@@ -227,11 +281,24 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsFlatFileViewVisible));
         OnPropertyChanged(nameof(IsFolderViewVisible));
         SyncSelectedFileTreeNode(SelectedFile);
+        SaveCurrentSettings();
+    }
+
+    partial void OnIsSideBySideDiffViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsInlineDiffViewVisible));
+        OnPropertyChanged(nameof(IsSideBySideDiffViewVisible));
+        SaveCurrentSettings();
     }
 
     partial void OnShowOnlyModConflictsChanged(bool value)
     {
-        RefreshVisibleChangedFiles();
+        if (!_isUpdatingSelections)
+        {
+            RefreshVisibleChangedFiles();
+        }
+
+        SaveCurrentSettings();
     }
 
     partial void OnIgnoreWhitespaceChangesChanged(bool value)
@@ -241,6 +308,7 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        SaveCurrentSettings();
         QueueVersionComparison();
     }
 
@@ -299,12 +367,24 @@ public partial class MainWindowViewModel : ViewModelBase
                 ReplaceCollection(StartVersions, folders.Versions);
                 ReplaceCollection(Mods, folders.Mods);
 
-                SelectedStartVersion = folders.Versions.FirstOrDefault();
+                IsFolderView = _settings.IsFolderView;
+                IsSideBySideDiffView = _settings.IsSideBySideDiffView;
+                IgnoreWhitespaceChanges = _settings.IgnoreWhitespaceChanges;
+                ShowOnlyModConflicts = _settings.ShowOnlyModConflicts;
+                SelectedStartVersion = FindAvailableValue(folders.Versions, _settings.SelectedStartVersion)
+                    ?? folders.Versions.FirstOrDefault();
                 RefreshEndVersions();
-                SelectedEndVersion = EndVersions.FirstOrDefault();
-                SelectedModName = null;
+                SelectedEndVersion = FindAvailableValue(EndVersions, _settings.SelectedEndVersion)
+                    ?? EndVersions.FirstOrDefault();
+                SelectedModName = FindAvailableValue(folders.Mods, _settings.SelectedModName);
+
+                if (SelectedModName is null)
+                {
+                    ShowOnlyModConflicts = false;
+                }
 
                 _isUpdatingSelections = false;
+                SaveCurrentSettings();
                 QueueVersionComparison();
             });
         }
@@ -340,6 +420,40 @@ public partial class MainWindowViewModel : ViewModelBase
             .ToArray();
     }
 
+    private static string? FindAvailableValue(IEnumerable<string> availableValues, string? requestedValue)
+    {
+        if (string.IsNullOrWhiteSpace(requestedValue))
+        {
+            return null;
+        }
+
+        return availableValues.FirstOrDefault(value => string.Equals(
+            value,
+            requestedValue,
+            StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void SaveCurrentSettings()
+    {
+        if (_isUpdatingSelections)
+        {
+            return;
+        }
+
+        _settings = new AppSettings
+        {
+            SelectedStartVersion = SelectedStartVersion,
+            SelectedEndVersion = SelectedEndVersion,
+            SelectedModName = SelectedModName,
+            IsFolderView = IsFolderView,
+            IsSideBySideDiffView = IsSideBySideDiffView,
+            ShowOnlyModConflicts = ShowOnlyModConflicts,
+            IgnoreWhitespaceChanges = IgnoreWhitespaceChanges
+        };
+
+        _settingsStore.Save(_settings);
+    }
+
     private void QueueVersionComparison()
     {
         CancelAllBackgroundWork();
@@ -351,7 +465,7 @@ public partial class MainWindowViewModel : ViewModelBase
             ChangedFileCountText = "0 changed files";
             StatusText = $"No version folders found in {_versionRoot}.";
             SelectedFileTitle = "No version folders found";
-            SelectedFileSummary = "Create folders like Versions/2.6 and Versions/3.0, then add XML files inside them.";
+            SelectedFileSummary = "Create folders like Versions/2.6 and Versions/3.0, then add XML or ItemIcons files inside them.";
             ClearBusy();
             NotifySelectedFileStateChanged();
             return;
@@ -391,7 +505,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         ChangedFileCountText = "Loading changes...";
         SelectedFileTitle = "Comparing versions";
-        SelectedFileSummary = "Checking the local diff cache. XML files will be scanned if the cache is missing or stale.";
+        SelectedFileSummary = "Checking the local diff cache. XML and ItemIcons files will be scanned if the cache is missing or stale.";
         SetBusy($"Comparing {request.StartVersion} to {request.EndVersion}...");
         NotifySelectedFileStateChanged();
 
@@ -580,9 +694,11 @@ public partial class MainWindowViewModel : ViewModelBase
         if (file is null)
         {
             DiffLines = [];
+            SideBySideDiffRows = [];
             SelectedDiffLine = null;
+            SelectedSideBySideDiffRow = null;
             ResetDiffNavigation();
-            SelectedFileTitle = "Select a changed XML file";
+            SelectedFileTitle = "Select a changed file";
             SelectedFileSummary = "The diff will appear here after you choose a file.";
             NotifySelectedFileStateChanged();
             return;
@@ -590,6 +706,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         DiffLines = new ObservableCollection<DiffLineViewModel>(
             file.Model.Lines.Select(line => new DiffLineViewModel(line)));
+        SideBySideDiffRows = BuildSideBySideDiffRows(DiffLines);
         RebuildDiffAreaIndexes();
 
         SelectedFileTitle = file.RelativePath;
@@ -664,7 +781,9 @@ public partial class MainWindowViewModel : ViewModelBase
         SelectedFileTreeNode = null;
         _fileTreeNodesByPath = new Dictionary<string, FileTreeNodeViewModel>(StringComparer.OrdinalIgnoreCase);
         DiffLines = [];
+        SideBySideDiffRows = [];
         SelectedDiffLine = null;
+        SelectedSideBySideDiffRow = null;
         ResetDiffNavigation();
         SelectedFile = null;
     }
@@ -686,6 +805,8 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(HasSelectedFile));
         OnPropertyChanged(nameof(HasNoSelectedFile));
+        OnPropertyChanged(nameof(IsInlineDiffViewVisible));
+        OnPropertyChanged(nameof(IsSideBySideDiffViewVisible));
     }
 
     private void RefreshVisibleChangedFiles()
@@ -742,8 +863,8 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (_allChangedFiles.Count == 0)
         {
-            SelectedFileTitle = "No XML changes found";
-            SelectedFileSummary = "Choose another version range or add more XML snapshots.";
+            SelectedFileTitle = "No version changes found";
+            SelectedFileSummary = "Choose another version range or add more XML or ItemIcons snapshots.";
             return;
         }
 
@@ -756,7 +877,7 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        SelectedFileTitle = "Select a changed XML file";
+        SelectedFileTitle = "Select a changed file";
         SelectedFileSummary = "The diff will appear here after you choose a file.";
     }
 
@@ -798,6 +919,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         _currentDiffAreaIndex = diffAreaIndex;
         SelectedDiffLine = DiffLines[_diffAreaIndexes[diffAreaIndex]];
+        SyncSelectedSideBySideDiffRow(SelectedDiffLine);
         RefreshDiffNavigationStatus();
     }
 
@@ -858,6 +980,34 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         return new ObservableCollection<ChangedFileViewModel>(
             comparison.ChangedFiles.Select(file => new ChangedFileViewModel(file)));
+    }
+
+    private static ObservableCollection<SideBySideDiffRowViewModel> BuildSideBySideDiffRows(
+        IReadOnlyList<DiffLineViewModel> lines)
+    {
+        var rows = new ObservableCollection<SideBySideDiffRowViewModel>();
+
+        for (var index = 0; index < lines.Count; index++)
+        {
+            var line = lines[index];
+            if (line.Model.Kind == DiffLineKind.Removed
+                && index + 1 < lines.Count
+                && lines[index + 1].Model.Kind == DiffLineKind.Added)
+            {
+                rows.Add(new SideBySideDiffRowViewModel(line, lines[index + 1]));
+                index++;
+                continue;
+            }
+
+            rows.Add(line.Model.Kind switch
+            {
+                DiffLineKind.Removed => new SideBySideDiffRowViewModel(line, null),
+                DiffLineKind.Added => new SideBySideDiffRowViewModel(null, line),
+                _ => new SideBySideDiffRowViewModel(line, line)
+            });
+        }
+
+        return rows;
     }
 
     private void RebuildFileTree()
@@ -967,6 +1117,24 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    private void SyncSelectedSideBySideDiffRow(DiffLineViewModel? line)
+    {
+        _isSyncingSideBySideSelection = true;
+
+        try
+        {
+            SelectedSideBySideDiffRow = line is null
+                ? null
+                : SideBySideDiffRows.FirstOrDefault(row =>
+                    ReferenceEquals(row.OldLine, line)
+                    || ReferenceEquals(row.NewLine, line));
+        }
+        finally
+        {
+            _isSyncingSideBySideSelection = false;
+        }
+    }
+
     private static void ExpandAncestors(FileTreeNodeViewModel node)
     {
         var current = node.Parent;
@@ -979,7 +1147,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private static string BuildSelectedFileSummary(ChangedFileViewModel file)
     {
-        var parts = new List<string> { file.ChangeTypeText };
+        var parts = new List<string> { file.ChangeTypeText, file.FileKindText };
 
         if (file.Model.Additions > 0)
         {
@@ -1006,7 +1174,7 @@ public partial class MainWindowViewModel : ViewModelBase
             + $"{comparison.AddedFiles} added, "
             + $"{comparison.RemovedFiles} removed | "
             + $"+{comparison.TotalAdditions} -{comparison.TotalDeletions} | "
-            + (comparison.IsFromCache ? "Loaded from cache" : "Cache refreshed");
+            + BuildCacheStatusText(comparison);
 
         if (!string.IsNullOrWhiteSpace(comparison.ModName))
         {
@@ -1018,6 +1186,16 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         return status;
+    }
+
+    private static string BuildCacheStatusText(VersionComparison comparison)
+    {
+        if (comparison.IsCacheDisabled)
+        {
+            return "Cache disabled";
+        }
+
+        return comparison.IsFromCache ? "Loaded from cache" : "Cache refreshed";
     }
 
     private sealed record FolderLoadResult(

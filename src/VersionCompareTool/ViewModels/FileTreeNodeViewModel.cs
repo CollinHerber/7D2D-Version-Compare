@@ -55,6 +55,8 @@ public sealed class FileTreeNodeViewModel : ObservableObject
 
     public bool HasModConflicts => File?.HasModConflicts ?? false;
 
+    public bool IsBinaryAsset => File?.IsBinaryAsset ?? false;
+
     public string ModConflictCountText => File?.ModConflictCountText ?? string.Empty;
 
     public IBrush CardBackground => File?.CardBackground ?? Brush.Parse("#00000000");
@@ -66,6 +68,8 @@ public sealed class FileTreeNodeViewModel : ObservableObject
     public IBrush BadgeBackground => File?.BadgeBackground ?? Brush.Parse("#00000000");
 
     public IBrush BadgeForeground => File?.BadgeForeground ?? Brush.Parse("#FFF7E0");
+
+    public IBrush FileKindBadgeBackground => File?.FileKindBadgeBackground ?? Brush.Parse("#00000000");
 
     public bool IsExpanded
     {
